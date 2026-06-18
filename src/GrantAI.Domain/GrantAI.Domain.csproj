@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Domain is the heart of the system: entities and enums only.
+    It deliberately has NO dependencies (no MongoDB, no ASP.NET) so the
+    business model stays persistence- and framework-ignorant.
+  -->
+
+</Project>

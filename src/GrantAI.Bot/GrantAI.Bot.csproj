@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Bot = a headless worker (generic Host) that long-polls Telegram and answers
+    commands. It calls the very same Application services as the API directly,
+    in-process — there is no HTTP hop to the API, which keeps it simple and fast.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Telegram.Bot" Version="22.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GrantAI.Application\GrantAI.Application.csproj" />
+    <ProjectReference Include="..\GrantAI.Infrastructure\GrantAI.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

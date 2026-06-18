@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Application = use cases + business logic (forecast, probability, analytics,
+    import orchestration) and the abstractions (ports) that Infrastructure
+    implements. It depends ONLY on Domain plus a few cross-cutting libraries.
+    No MongoDB / Redis / Excel libraries leak in here.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="13.0.1" />
+    <PackageReference Include="FluentValidation" Version="11.11.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GrantAI.Domain\GrantAI.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

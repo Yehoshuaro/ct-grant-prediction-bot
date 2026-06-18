@@ -1,0 +1,29 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## Build output
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+## Logs produced by Serilog
+logs/
+*.log
+
+## Local secrets / environment
+.env
+*.env.local
+appsettings.*.Local.json
+
+## OS noise
+.DS_Store
+Thumbs.db

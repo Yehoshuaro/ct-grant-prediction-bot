@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    API = the HTTP entry point. It depends on Application (use-cases) and on
+    Infrastructure purely to wire the adapters into DI at startup. Controllers
+    only ever talk to Application services.
+
+    XML documentation is generated here so Swagger can surface the controller
+    and DTO comments; 1591 is silenced so we don't have to document every member.
+  -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GrantAI.Application\GrantAI.Application.csproj" />
+    <ProjectReference Include="..\GrantAI.Infrastructure\GrantAI.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
