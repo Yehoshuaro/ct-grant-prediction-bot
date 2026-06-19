@@ -41,6 +41,14 @@ public static class MongoMappings
 
             BsonClassMap.RegisterClassMap<ImportRowError>(cm => cm.AutoMap());
 
+            BsonClassMap.RegisterClassMap<GrantCutoffRecord>(cm =>
+            {
+                cm.AutoMap();
+                cm.MapIdMember(r => r.Id);
+                cm.MapMember(r => r.MasterType).SetSerializer(new EnumSerializer<MasterType>(BsonType.String));
+                cm.SetIgnoreExtraElements(true);
+            });
+
             _registered = true;
         }
     }

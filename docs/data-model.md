@@ -1,8 +1,13 @@
 # Data model
 
-Every published statistics workbook is normalised into one canonical document,
-`AdmissionRecord` — one row per educational program group (ГОП) per campaign
-(year + season). Import runs are tracked separately in `ImportLog`.
+The platform stores two independent streams of normalised documents:
+
+- **`AdmissionRecord`** — entrance-test (КТ) threshold statistics, one row per
+  ГОП per campaign (year + season), imported from Excel.
+- **`GrantCutoffRecord`** — yearly grant-allocation statistics, one row per
+  ГОП per intake year per master's track, imported from the published PDFs.
+
+Import runs are tracked separately in `ImportLog`.
 
 ## Documents
 
@@ -43,19 +48,53 @@ erDiagram
 `ImportRowError` is an embedded sub-document inside `ImportLog.Errors`, not a
 separate collection.
 
-## What the data is (and is not)
+The grant-side document looks like this:
+
+```mermaid
+erDiagram
+    GRANT_CUTOFF_RECORD {
+        string Id PK "natural key: year|masterType|group"
+        int Year "intake year, e.g. 2025"
+        string MasterType "Profile | ScientificPedagogical (string)"
+        int ScoreScaleMax "70 for Profile, 150 for Scientific-Pedagogical"
+        string GroupCode "e.g. M094"
+        string GroupName "e.g. Информационные технологии"
+        int GrantCutoff "min winner score in this block"
+        int GrantsAwarded "count of winners listed"
+        int MaxScore
+        double AvgScore
+        string SourceFile
+        datetime ImportedAtUtc
+    }
+```
+
+## What the threshold (Excel) data is — and is not
 
 The source files come from the complex-testing (КТ) entrance exam. Per group and
 campaign they report **counts**: how many applied, how many sat the test, and how
-many cleared the entrance threshold ("порог") versus not. There is deliberately:
+many cleared the entrance threshold ("порог") versus not. They contain:
 
 - **no per-applicant score**, no minimum/maximum/average score, and no single
   numeric "passing score" — the data is counts, not marks;
-- **no grant allocation** — these are test-threshold results, not grant awards;
-- **no admission-track split** (научно-педагогическое / профильное).
+- **no master's-track split** — both Profile and Scientific-Pedagogical are
+  pooled into one row per (group, campaign).
 
-So the analytics are built around the **threshold pass rate** (% набравших порог),
-which is what the data actually supports.
+So the threshold analytics are built around the **threshold pass rate** (%
+набравших порог), which is what the threshold data actually supports.
+
+## What the grant (PDF) data is — and is not
+
+The grant PDFs list every grant winner per ГОП, sorted by descending score.
+Per row they carry: row number, 8-digit ИКТ, ФИО, **Сумма баллов** (the
+applicant's score), and — sometimes — a 3-digit ОВПО (host university) code.
+
+Sections split by master's track (`ПРОФИЛЬНАЯ` / `НАУЧНО-ПЕДАГОГИЧЕСКАЯ`), and
+the two tracks use **different score scales** (70 vs 150), so cutoffs from one
+track are **not comparable** to cutoffs from the other. The track is stored
+alongside every record so the API can always report the right scale.
+
+The headline metric is the **grant cutoff**: the minimum winner score in a
+block — i.e. the lowest score that still claimed a grant.
 
 ## Derived metrics
 
@@ -96,21 +135,22 @@ by construction (two rows for the same group/campaign collapse to one key).
 
 ## Collections & indexes
 
-| Collection           | Type             | Indexes                              |
-|----------------------|------------------|--------------------------------------|
-| `admission_records`  | `AdmissionRecord`| `_id` (key); `GroupCode`; `{ Year, Season }` |
-| `import_logs`        | `ImportLog`      | `_id`                                |
+| Collection           | Type               | Indexes                                       |
+|----------------------|--------------------|-----------------------------------------------|
+| `admission_records`  | `AdmissionRecord`  | `_id` (key); `GroupCode`; `{ Year, Season }`  |
+| `import_logs`        | `ImportLog`        | `_id`                                         |
+| `grant_cutoffs`      | `GrantCutoffRecord`| `_id` (key); `GroupCode`; `{ Year, GroupCode }` |
 
 Indexes are created on start-up by `MongoContext.EnsureIndexesAsync()`
 (best-effort; the hosts log and continue if MongoDB is briefly unavailable).
 
 ## Enums (stored as strings)
 
-| `Season` | value | | `TrendDirection` | value |
-|----------|-------|-|------------------|-------|
-| Summer   | 1     | | Falling          | -1    |
-| Winter   | 2     | | Stable           | 0     |
-|          |       | | Rising           | 1     |
+| `Season` | value | | `TrendDirection` | value | | `MasterType`           | value |
+|----------|-------|-|------------------|-------|-|------------------------|-------|
+| Summer   | 1     | | Falling          | -1    | | Profile                | 1     |
+| Winter   | 2     | | Stable           | 0     | | ScientificPedagogical  | 2     |
+|          |       | | Rising           | 1     | |                        |       |
 
 > Campaign ordering for the time-series code is `year * 2 + (Winter ? 0 : 1)`, so
 > the **winter** intake of a year sorts *before* that year's **summer** intake

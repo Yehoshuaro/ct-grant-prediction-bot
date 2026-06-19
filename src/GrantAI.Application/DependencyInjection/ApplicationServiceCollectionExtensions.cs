@@ -2,6 +2,7 @@ using FluentValidation;
 using GrantAI.Application.Analytics;
 using GrantAI.Application.Forecasting;
 using GrantAI.Application.Importing;
+using GrantAI.Application.Importing.Grants;
 using GrantAI.Application.Probability;
 using GrantAI.Application.Specialties;
 using GrantAI.Application.Validation;
@@ -28,6 +29,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IProbabilityService, ProbabilityService>();
         services.AddSingleton<ISpecialtyQueryService, SpecialtyQueryService>();
         services.AddSingleton<IExcelImportService, ExcelImportService>();
+
+        // Grant-side use-cases run in parallel to the threshold ones and share
+        // the same DI lifetimes; the two streams never cross over.
+        services.AddSingleton<IGrantForecastService, GrantForecastService>();
+        services.AddSingleton<IGrantQueryService, GrantQueryService>();
+        services.AddSingleton<IGrantImportService, GrantImportService>();
 
         return services;
     }

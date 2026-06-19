@@ -23,7 +23,8 @@ internal static class MessageFormatter
         "<code>/history M094</code> — full campaign history and trends\n" +
         "<code>/forecast M094</code> — predicted next-campaign pass rate\n" +
         "<code>/chance M094</code> — probability of clearing the threshold\n" +
-        "<code>/compare M094</code> — summer vs winter comparison\n\n" +
+        "<code>/compare M094</code> — summer vs winter comparison\n" +
+        "<code>/grant M094</code> — predicted next-intake <b>grant cutoff</b> score\n\n" +
         "Codes are educational program groups such as <b>M094</b>, <b>M010</b>, <b>M001</b>.";
 
     public static string Usage(string command, string example) =>
@@ -157,6 +158,52 @@ internal static class MessageFormatter
         {
             sb.Append('\n').Append("<i>").Append(Display.Escape(c.Summary)).Append("</i>");
         }
+        return sb.ToString();
+    }
+
+    public static string GrantForecast(string code, IReadOnlyList<GrantForecastDto> forecasts)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<b>🎓 Grant forecast — ").Append(Display.Escape(code.ToUpperInvariant())).Append("</b>\n");
+
+        // Group name is the same for both tracks; pull it from whichever entry has one.
+        var name = forecasts.Select(f => f.Name).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            sb.Append("<i>").Append(Display.Escape(name)).Append("</i>\n");
+        }
+        sb.Append('\n');
+
+        for (var i = 0; i < forecasts.Count; i++)
+        {
+            var f = forecasts[i];
+            if (i > 0) sb.Append('\n');
+
+            sb.Append("<b>").Append(Display.MasterTrack(f.MasterType)).Append("</b> ")
+              .Append("(scale 0–").Append(f.ScoreScaleMax).Append(")\n");
+            sb.Append("To win a grant in the next intake you'll likely need ")
+              .Append("<b>≈ ").Append(f.PredictedCutoff).Append(" / ").Append(f.ScoreScaleMax).Append("</b>\n");
+            sb.Append("Range: <b>").Append(f.LowerBound).Append('–').Append(f.UpperBound)
+              .Append(" / ").Append(f.ScoreScaleMax).Append("</b>\n");
+            sb.Append("Confidence: <b>").Append(f.ConfidencePercent).Append("%</b>, ")
+              .Append("trend: ").Append(Display.Trend(f.Trend)).Append('\n');
+            sb.Append("Based on <b>").Append(f.DataPoints).Append("</b> year(s) of grant data\n");
+
+            if (f.Factors.Count > 0)
+            {
+                foreach (var factor in f.Factors)
+                {
+                    sb.Append("• ").Append(Display.Escape(factor)).Append('\n');
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(f.Explanation))
+            {
+                sb.Append("<i>").Append(Display.Escape(f.Explanation)).Append("</i>\n");
+            }
+        }
+
+        sb.Append("\n<i>Note: only 2–3 intake years are usually on record, so treat the figure as a guideline rather than a precise number.</i>");
         return sb.ToString();
     }
 

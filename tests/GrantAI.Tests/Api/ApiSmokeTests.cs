@@ -97,6 +97,40 @@ public class ApiSmokeTests : IClassFixture<ApiSmokeTests.Factory>
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetGrants_ReturnsOkWithList()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/grants");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(FakeGrantQueryService.KnownCode, body);
+    }
+
+    [Fact]
+    public async Task GetGrantForecast_KnownCode_ReturnsOk()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/grants/{FakeGrantQueryService.KnownCode}/forecast");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("predictedCutoff", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetGrantForecast_UnknownCode_ReturnsNotFound()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/grants/ZZZ999/forecast");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     public sealed class Factory : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -111,6 +145,8 @@ public class ApiSmokeTests : IClassFixture<ApiSmokeTests.Factory>
             {
                 services.RemoveAll<ISpecialtyQueryService>();
                 services.AddSingleton<ISpecialtyQueryService, FakeSpecialtyQueryService>();
+                services.RemoveAll<IGrantQueryService>();
+                services.AddSingleton<IGrantQueryService, FakeGrantQueryService>();
             });
         }
     }

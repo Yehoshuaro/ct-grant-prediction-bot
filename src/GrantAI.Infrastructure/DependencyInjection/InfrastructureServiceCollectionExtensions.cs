@@ -1,9 +1,11 @@
 using GrantAI.Application.Abstractions;
 using GrantAI.Application.Common;
 using GrantAI.Application.Importing;
+using GrantAI.Application.Importing.Grants;
 using GrantAI.Infrastructure.Caching;
 using GrantAI.Infrastructure.Configuration;
 using GrantAI.Infrastructure.Excel;
+using GrantAI.Infrastructure.Pdf;
 using GrantAI.Infrastructure.Persistence;
 using GrantAI.Infrastructure.Persistence.Repositories;
 using Microsoft.Extensions.Configuration;
@@ -40,6 +42,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<MongoContext>();
         services.AddSingleton<IAdmissionRepository, AdmissionRepository>();
         services.AddSingleton<IImportLogRepository, ImportLogRepository>();
+        services.AddSingleton<IGrantCutoffRepository, GrantCutoffRepository>();
 
         // Redis
         services.AddSingleton<IConnectionMultiplexer>(_ =>
@@ -48,6 +51,9 @@ public static class InfrastructureServiceCollectionExtensions
 
         // Excel
         services.AddSingleton<IWorkbookReader, ClosedXmlWorkbookReader>();
+
+        // Grant PDFs
+        services.AddSingleton<IGrantPdfReader, PdfPigGrantPdfReader>();
 
         return services;
     }

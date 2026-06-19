@@ -16,7 +16,7 @@ flowchart TD
         BOT["GrantAI.Bot<br/>(Telegram long-poll)"]
     end
 
-    INFRA["GrantAI.Infrastructure<br/>MongoDB · Redis · ClosedXML · Serilog"]
+    INFRA["GrantAI.Infrastructure<br/>MongoDB · Redis · ClosedXML · PdfPig · Serilog"]
     APP["GrantAI.Application<br/>use-cases · analytics · forecasting · probability · import"]
     DOMAIN["GrantAI.Domain<br/>entities · enums (no dependencies)"]
 
@@ -44,10 +44,11 @@ Redis or ClosedXML types.
   `IWorkbookReader`) and the pure engines that implement the business logic.
   Forecasting, probability and analytics are all deterministic functions of the
   records passed in, which is what makes them easy to unit-test.
-- **Infrastructure** — the adapters: `AdmissionRepository` (MongoDB.Driver),
-  `RedisCacheService` (StackExchange.Redis), `ClosedXmlWorkbookReader`
-  (ClosedXML) and the Serilog configurator. This is the only project that
-  references those libraries.
+- **Infrastructure** — the adapters: `AdmissionRepository` /
+  `GrantCutoffRepository` (MongoDB.Driver), `RedisCacheService`
+  (StackExchange.Redis), `ClosedXmlWorkbookReader` (ClosedXML),
+  `PdfPigGrantPdfReader` (UglyToad.PdfPig) and the Serilog configurator. This
+  is the only project that references those libraries.
 - **API / Bot** — thin delivery mechanisms over the same `ISpecialtyQueryService`
   and `IExcelImportService`.
 
@@ -98,6 +99,15 @@ sequenceDiagram
 Because every cache key is namespaced under `grantai:`, a successful import
 invalidates all derived reads in one `SCAN`-based sweep, so the next query
 recomputes from fresh data.
+
+The grant-side write path (POST `/api/grants/import`) is the same shape, with
+its own reader (`IGrantPdfReader` → `PdfPigGrantPdfReader`), its own parser
+(`GrantPdfParser`, which detects sections, blocks and winner rows), its own
+repository (`grant_cutoffs` collection), and its own cache prefix
+(`grantai:grant:`). The two streams share the host, the Mongo client, the
+Redis multiplexer and the cross-cutting libraries, but they share no entities
+or services — so adding the grant feature did not change any threshold
+behaviour.
 
 ## Why these choices
 

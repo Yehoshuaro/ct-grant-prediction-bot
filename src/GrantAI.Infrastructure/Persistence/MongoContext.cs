@@ -13,6 +13,7 @@ public sealed class MongoContext
 {
     public const string AdmissionRecordsCollection = "admission_records";
     public const string ImportLogsCollection = "import_logs";
+    public const string GrantCutoffsCollection = "grant_cutoffs";
 
     private readonly IMongoDatabase _database;
 
@@ -28,21 +29,31 @@ public sealed class MongoContext
     public IMongoCollection<ImportLog> ImportLogs
         => _database.GetCollection<ImportLog>(ImportLogsCollection);
 
+    public IMongoCollection<GrantCutoffRecord> GrantCutoffs
+        => _database.GetCollection<GrantCutoffRecord>(GrantCutoffsCollection);
+
     /// <summary>
     /// Creates the indexes that back the main lookups (by group code and by
-    /// campaign). Index creation is idempotent in MongoDB.
+    /// campaign / intake year). Index creation is idempotent in MongoDB.
     /// </summary>
     public async Task EnsureIndexesAsync(CancellationToken ct = default)
     {
-        var keys = Builders<AdmissionRecord>.IndexKeys;
-
-        var models = new[]
+        var admissionKeys = Builders<AdmissionRecord>.IndexKeys;
+        var admissionModels = new[]
         {
-            new CreateIndexModel<AdmissionRecord>(keys.Ascending(r => r.GroupCode)),
+            new CreateIndexModel<AdmissionRecord>(admissionKeys.Ascending(r => r.GroupCode)),
             new CreateIndexModel<AdmissionRecord>(
-                keys.Ascending(r => r.Year).Ascending(r => r.Season))
+                admissionKeys.Ascending(r => r.Year).Ascending(r => r.Season))
         };
+        await AdmissionRecords.Indexes.CreateManyAsync(admissionModels, ct);
 
-        await AdmissionRecords.Indexes.CreateManyAsync(models, ct);
+        var grantKeys = Builders<GrantCutoffRecord>.IndexKeys;
+        var grantModels = new[]
+        {
+            new CreateIndexModel<GrantCutoffRecord>(grantKeys.Ascending(r => r.GroupCode)),
+            new CreateIndexModel<GrantCutoffRecord>(
+                grantKeys.Ascending(r => r.Year).Ascending(r => r.GroupCode))
+        };
+        await GrantCutoffs.Indexes.CreateManyAsync(grantModels, ct);
     }
 }

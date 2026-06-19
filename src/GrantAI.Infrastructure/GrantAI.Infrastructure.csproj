@@ -2,13 +2,15 @@
 
   <!--
     Infrastructure = the adapters that implement the Application ports against
-    concrete technology: MongoDB (persistence), Redis (cache), ClosedXML (Excel)
-    and Serilog (logging). This is the ONLY place those libraries are referenced.
+    concrete technology: MongoDB (persistence), Redis (cache), ClosedXML (Excel),
+    PdfPig (Grant PDFs) and Serilog (logging). This is the ONLY place those
+    libraries are referenced.
   -->
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="MongoDB.Driver" Version="3.1.0" />
+    <PackageReference Include="PdfPig" Version="0.1.10" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
 
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />

@@ -115,3 +115,62 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
         LatestPassRate = 80
     };
 }
+
+/// <summary>
+/// Deterministic in-memory stand-in for <see cref="IGrantQueryService"/>. Same
+/// known/unknown shape as the entrance-threshold fake so the HTTP-layer tests
+/// can verify 200/404 handling without a database.
+/// </summary>
+internal sealed class FakeGrantQueryService : IGrantQueryService
+{
+    public const string KnownCode = "M094";
+
+    private static bool IsKnown(string code) => string.Equals(code, KnownCode, StringComparison.OrdinalIgnoreCase);
+
+    public Task<IReadOnlyList<GrantSummaryDto>> GetAllAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<GrantSummaryDto>>(
+        [
+            new GrantSummaryDto
+            {
+                Code = KnownCode, Name = "Test Group",
+                MasterType = MasterType.ScientificPedagogical, ScoreScaleMax = 150,
+                LatestYear = 2025, LatestCutoff = 130, LatestGrantsAwarded = 12, YearsOnRecord = 3
+            }
+        ]);
+
+    public Task<GrantHistoryDto> GetHistoryAsync(string code, CancellationToken ct = default)
+        => Task.FromResult(IsKnown(code)
+            ? new GrantHistoryDto
+            {
+                Code = KnownCode, GroupName = "Test Group",
+                Points =
+                [
+                    new GrantCutoffPointDto
+                    {
+                        Year = 2024, MasterType = MasterType.ScientificPedagogical, ScoreScaleMax = 150,
+                        GrantCutoff = 125, GrantsAwarded = 10, MaxScore = 148, AvgScore = 135
+                    },
+                    new GrantCutoffPointDto
+                    {
+                        Year = 2025, MasterType = MasterType.ScientificPedagogical, ScoreScaleMax = 150,
+                        GrantCutoff = 130, GrantsAwarded = 12, MaxScore = 149, AvgScore = 138
+                    }
+                ]
+            }
+            : new GrantHistoryDto { Code = code });
+
+    public Task<IReadOnlyList<GrantForecastDto>> GetForecastAsync(string code, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<GrantForecastDto>>(IsKnown(code)
+            ?
+            [
+                new GrantForecastDto
+                {
+                    Code = KnownCode, Name = "Test Group",
+                    MasterType = MasterType.ScientificPedagogical, ScoreScaleMax = 150,
+                    PredictedCutoff = 132, LowerBound = 124, UpperBound = 140,
+                    ConfidencePercent = 55, Trend = TrendDirection.Rising,
+                    DataPoints = 2, Method = "Test method"
+                }
+            ]
+            : []);
+}

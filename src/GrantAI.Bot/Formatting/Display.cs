@@ -24,6 +24,13 @@ internal static class Display
         _ => season.ToString()
     };
 
+    public static string MasterTrack(MasterType track) => track switch
+    {
+        MasterType.Profile => "Профильная (Profile)",
+        MasterType.ScientificPedagogical => "Научно-педагогическая (Scientific-Pedagogical)",
+        _ => track.ToString()
+    };
+
     /// <summary>Escapes the characters that matter for Telegram HTML mode.</summary>
     public static string Escape(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 

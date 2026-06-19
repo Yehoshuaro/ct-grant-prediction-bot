@@ -6,18 +6,23 @@ namespace GrantAI.Bot.Handlers;
 
 /// <summary>
 /// Pure command interpreter: maps a raw message string to a formatted reply by
-/// calling the Application read facade. It has no Telegram dependency, so the
+/// calling the Application read facades. It has no Telegram dependency, so the
 /// transport (polling, sending) stays in <c>BotHostedService</c> and the routing
 /// logic here is straightforward to follow and test.
 /// </summary>
 public sealed class CommandRouter
 {
     private readonly ISpecialtyQueryService _specialties;
+    private readonly IGrantQueryService _grants;
     private readonly ILogger<CommandRouter> _logger;
 
-    public CommandRouter(ISpecialtyQueryService specialties, ILogger<CommandRouter> logger)
+    public CommandRouter(
+        ISpecialtyQueryService specialties,
+        IGrantQueryService grants,
+        ILogger<CommandRouter> logger)
     {
         _specialties = specialties;
+        _grants = grants;
         _logger = logger;
     }
 
@@ -45,6 +50,7 @@ public sealed class CommandRouter
                 "forecast" => await ForecastAsync(args, ct),
                 "chance" => await ChanceAsync(args, ct),
                 "compare" => await CompareAsync(args, ct),
+                "grant" => await GrantAsync(args, ct),
                 _ => MessageFormatter.Help()
             };
         }
@@ -121,6 +127,20 @@ public sealed class CommandRouter
         return comparison.BySeason.Count == 0
             ? MessageFormatter.NotFound(code)
             : MessageFormatter.Comparison(comparison);
+    }
+
+    private async Task<string> GrantAsync(string[] args, CancellationToken ct)
+    {
+        if (args.Length < 1)
+        {
+            return MessageFormatter.Usage("/grant", "M094");
+        }
+
+        var code = args[0];
+        var forecasts = await _grants.GetForecastAsync(code, ct);
+        return forecasts.Count == 0
+            ? MessageFormatter.NotFound(code)
+            : MessageFormatter.GrantForecast(code, forecasts);
     }
 
     /// <summary>Strips the leading slash and any <c>@BotName</c> suffix, lower-cased.</summary>
