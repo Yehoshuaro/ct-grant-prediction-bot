@@ -14,6 +14,12 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+
+    <!-- OpenTelemetry: tracing + metrics for the bot's outbound HTTP and runtime. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.10.0" />
   </ItemGroup>
 
   <ItemGroup>

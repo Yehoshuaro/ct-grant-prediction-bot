@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using GrantAI.API.Errors;
 using GrantAI.API.Health;
 using GrantAI.API.RateLimiting;
+using GrantAI.API.Telemetry;
 using GrantAI.Application.DependencyInjection;
 using GrantAI.Infrastructure.DependencyInjection;
 using GrantAI.Infrastructure.Logging;
@@ -35,6 +36,8 @@ try
     builder.Services.AddHealthChecks()
         .AddCheck<MongoHealthCheck>("mongo", tags: ["ready"])
         .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
+
+    builder.Services.AddGrantAiObservability(builder.Configuration, roleName: "api");
 
     builder.Services.AddProblemDetails();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();

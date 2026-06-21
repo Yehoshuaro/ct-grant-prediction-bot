@@ -16,6 +16,17 @@
   <ItemGroup>
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+
+    <!--
+      OpenTelemetry: tracing + metrics with ASP.NET Core, HttpClient and runtime
+      instrumentation. OTLP exporter only fires when OTEL_EXPORTER_OTLP_ENDPOINT
+      is set, so local runs without a collector still start cleanly.
+    -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.10.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.10.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.10.0" />
   </ItemGroup>
 
   <ItemGroup>

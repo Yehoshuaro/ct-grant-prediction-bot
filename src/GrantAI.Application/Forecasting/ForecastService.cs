@@ -1,4 +1,5 @@
 using GrantAI.Application.Common;
+using GrantAI.Application.Common.Telemetry;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Domain.Entities;
 using GrantAI.Domain.Enums;
@@ -27,6 +28,22 @@ public sealed class ForecastService : IForecastService
     {
         code = code.ToUpperInvariant();
 
+        using var activity = GrantAiTelemetry.Activity.StartActivity("forecast.threshold");
+        activity?.SetTag("grantai.code", code);
+        activity?.SetTag("grantai.points", records.Count);
+
+        try
+        {
+            return ForecastCore(code, records);
+        }
+        finally
+        {
+            GrantAiTelemetry.ForecastsServed.Add(1, new KeyValuePair<string, object?>("kind", "threshold"));
+        }
+    }
+
+    private ForecastDto ForecastCore(string code, IReadOnlyList<AdmissionRecord> records)
+    {
         if (records.Count == 0)
         {
             return new ForecastDto
