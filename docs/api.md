@@ -20,6 +20,11 @@ JSON with camelCase property names; enums are serialised as strings.
 | GET    | `/api/grants/{code}`           | Grant-cutoff history per year, per track.         | 404 if no data. |
 | GET    | `/api/grants/{code}/forecast`  | Forecast of the next intake's grant cutoff.       | 404 if no data. |
 | POST   | `/api/grants/import`           | Upload one or more grant-list `.pdf` files.       | 400 if no files. |
+| GET    | `/health`                      | Liveness (no dependencies).                       | — |
+| GET    | `/health/ready`                | Readiness (Mongo + Redis ping).                   | 503 if either is down. |
+
+Errors come back as RFC 7807 ProblemDetails. Rate-limit rejections come back
+as `429 Too Many Requests` with a `Retry-After` header.
 
 ### GET `/api/specialities/{code}`
 
@@ -193,17 +198,29 @@ than inserted (the natural-key `_id` makes the operation idempotent).
 
 ## Telegram bot commands
 
+The bot answers in Russian. Inline buttons sit under the welcome / help
+screens and under every per-code summary, so users can jump between
+`/forecast`, `/history`, `/chance`, `/compare` and `/grant` without typing.
+
 | Command               | Example            | Result |
 |-----------------------|--------------------|--------|
 | `/start`, `/help`     | `/help`            | Welcome / command list. |
 | `/speciality <code>`  | `/speciality M094` | Latest-campaign summary for a group. |
 | `/history <code>`     | `/history M094`    | Campaign-by-campaign history with trends. |
-| `/forecast <code>`    | `/forecast M094`   | Next-campaign pass-rate forecast. |
-| `/chance <code>`      | `/chance M094`     | Probability of clearing the threshold. |
+| `/forecast <code>`    | `/forecast M094`   | Next-campaign threshold pass-rate forecast. |
+| `/chance <code>`      | `/chance M094`     | Chance of clearing the threshold (group pass-rate). |
 | `/compare <code>`     | `/compare M094`    | Summer vs winter. |
-| `/grant <code>`       | `/grant M094`      | Next-intake grant-cutoff forecast (per master's track). |
+| `/grant <code>`       | `/grant M094`      | Next-intake grant-cutoff forecast per master's track. |
 
 `/specialty` (US spelling) is accepted as an alias for `/speciality`. Commands
 sent with the bot's @-mention (e.g. `/forecast@MyBot M094`) are handled too.
+
+`/chance` is **the share of participants in the group that historically clear
+the threshold**, not the chance of winning a grant. For grant estimates use
+`/grant`. The bot's text says so explicitly so the two are not confused.
+
+The bot has a per-chat sliding-window throttle (in-memory) which replies
+"Слишком много запросов" when tripped. Limits are configurable under
+`BotRateLimit` in `appsettings.json`.
 
 The numbers above are illustrative; exact values depend on the data you import.
