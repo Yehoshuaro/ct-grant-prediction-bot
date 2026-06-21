@@ -2,6 +2,7 @@ using GrantAI.API.RateLimiting;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace GrantAI.API.Controllers;
@@ -14,8 +15,13 @@ namespace GrantAI.API.Controllers;
 public sealed class ForecastController : ControllerBase
 {
     private readonly ISpecialtyQueryService _specialties;
+    private readonly ProblemDetailsFactory _problemFactory;
 
-    public ForecastController(ISpecialtyQueryService specialties) => _specialties = specialties;
+    public ForecastController(ISpecialtyQueryService specialties, ProblemDetailsFactory problemFactory)
+    {
+        _specialties = specialties;
+        _problemFactory = problemFactory;
+    }
 
     /// <summary>
     /// Forecasts the next campaign's threshold pass rate using linear regression
@@ -29,9 +35,7 @@ public sealed class ForecastController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ForecastDto>> Get(string code, CancellationToken ct)
     {
-        var forecast = await _specialties.GetForecastAsync(code, ct);
-        return forecast.DataPoints == 0
-            ? NotFound(SpecialitiesController.NotFoundPayload(code))
-            : Ok(forecast);
+        var result = await _specialties.GetForecastAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
 }

@@ -1,3 +1,4 @@
+using GrantAI.Application.Common.Results;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using GrantAI.Domain.Enums;
@@ -5,26 +6,29 @@ using GrantAI.Domain.Enums;
 namespace GrantAI.Tests.TestSupport;
 
 /// <summary>
-/// A deterministic, in-memory stand-in for <see cref="ISpecialtyQueryService"/>
-/// used by the API tests so they exercise the HTTP/controller layer without a
-/// running MongoDB or Redis. "M094" is the only known code; everything else
-/// returns the documented no-data shapes so 404 handling can be verified.
+/// Deterministic in-memory stand-in for <see cref="ISpecialtyQueryService"/>.
+/// "M094" is the only known code; everything else returns Result.Failure(NotFound)
+/// so 404 handling is exercised.
 /// </summary>
 internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
 {
     public const string KnownCode = "M094";
 
     private static bool IsKnown(string code) => string.Equals(code, KnownCode, StringComparison.OrdinalIgnoreCase);
+    private static Error NotFound(string code)
+        => Error.NotFound(code.ToUpperInvariant(), $"No admission data found for code '{code.ToUpperInvariant()}'.");
 
     public Task<IReadOnlyList<SpecialtySummaryDto>> GetSpecialtiesAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<SpecialtySummaryDto>>([Summary()]);
 
-    public Task<SpecialtySummaryDto?> GetSpecialtyAsync(string code, CancellationToken ct = default)
-        => Task.FromResult(IsKnown(code) ? Summary() : null);
-
-    public Task<AdmissionHistoryDto> GetHistoryAsync(string code, CancellationToken ct = default)
+    public Task<Result<SpecialtySummaryDto>> GetSpecialtyAsync(string code, CancellationToken ct = default)
         => Task.FromResult(IsKnown(code)
-            ? new AdmissionHistoryDto
+            ? Result<SpecialtySummaryDto>.Success(Summary())
+            : Result<SpecialtySummaryDto>.Failure(NotFound(code)));
+
+    public Task<Result<AdmissionHistoryDto>> GetHistoryAsync(string code, CancellationToken ct = default)
+        => Task.FromResult(IsKnown(code)
+            ? Result<AdmissionHistoryDto>.Success(new AdmissionHistoryDto
             {
                 Code = KnownCode,
                 GroupName = "Test Group",
@@ -40,12 +44,12 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
                 ApplicationsTrend = TrendDirection.Rising,
                 ParticipantsTrend = TrendDirection.Rising,
                 PassRateTrend = TrendDirection.Rising
-            }
-            : new AdmissionHistoryDto { Code = code });
+            })
+            : Result<AdmissionHistoryDto>.Failure(NotFound(code)));
 
-    public Task<ComparisonDto> GetComparisonAsync(string code, CancellationToken ct = default)
+    public Task<Result<ComparisonDto>> GetComparisonAsync(string code, CancellationToken ct = default)
         => Task.FromResult(IsKnown(code)
-            ? new ComparisonDto
+            ? Result<ComparisonDto>.Success(new ComparisonDto
             {
                 Code = KnownCode,
                 BySeason =
@@ -57,12 +61,12 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
                     }
                 ],
                 Summary = "Test comparison."
-            }
-            : new ComparisonDto { Code = code });
+            })
+            : Result<ComparisonDto>.Failure(NotFound(code)));
 
-    public Task<ForecastDto> GetForecastAsync(string code, CancellationToken ct = default)
+    public Task<Result<ForecastDto>> GetForecastAsync(string code, CancellationToken ct = default)
         => Task.FromResult(IsKnown(code)
-            ? new ForecastDto
+            ? Result<ForecastDto>.Success(new ForecastDto
             {
                 Code = KnownCode,
                 PredictedPassRate = 85,
@@ -72,12 +76,12 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
                 Trend = TrendDirection.Rising,
                 DataPoints = 5,
                 Method = "Test method"
-            }
-            : new ForecastDto { Code = code, DataPoints = 0, ConfidencePercent = 0 });
+            })
+            : Result<ForecastDto>.Failure(NotFound(code)));
 
-    public Task<ProbabilityDto> GetChanceAsync(string code, CancellationToken ct = default)
+    public Task<Result<ProbabilityDto>> GetChanceAsync(string code, CancellationToken ct = default)
         => Task.FromResult(IsKnown(code)
-            ? new ProbabilityDto
+            ? Result<ProbabilityDto>.Success(new ProbabilityDto
             {
                 Code = KnownCode,
                 PassProbabilityPercent = 85,
@@ -86,8 +90,8 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
                 PredictedPassRate = 85,
                 ConfidencePercent = 70,
                 DataPoints = 5
-            }
-            : new ProbabilityDto { Code = code, DataPoints = 0 });
+            })
+            : Result<ProbabilityDto>.Failure(NotFound(code)));
 
     public Task<StatisticsOverviewDto> GetStatisticsAsync(CancellationToken ct = default)
         => Task.FromResult(new StatisticsOverviewDto
@@ -118,14 +122,15 @@ internal sealed class FakeSpecialtyQueryService : ISpecialtyQueryService
 
 /// <summary>
 /// Deterministic in-memory stand-in for <see cref="IGrantQueryService"/>. Same
-/// known/unknown shape as the entrance-threshold fake so the HTTP-layer tests
-/// can verify 200/404 handling without a database.
+/// known/unknown shape as the threshold fake.
 /// </summary>
 internal sealed class FakeGrantQueryService : IGrantQueryService
 {
     public const string KnownCode = "M094";
 
     private static bool IsKnown(string code) => string.Equals(code, KnownCode, StringComparison.OrdinalIgnoreCase);
+    private static Error NotFound(string code)
+        => Error.NotFound(code.ToUpperInvariant(), $"No grant data found for code '{code.ToUpperInvariant()}'.");
 
     public Task<IReadOnlyList<GrantSummaryDto>> GetAllAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<GrantSummaryDto>>(
@@ -138,9 +143,9 @@ internal sealed class FakeGrantQueryService : IGrantQueryService
             }
         ]);
 
-    public Task<GrantHistoryDto> GetHistoryAsync(string code, CancellationToken ct = default)
+    public Task<Result<GrantHistoryDto>> GetHistoryAsync(string code, CancellationToken ct = default)
         => Task.FromResult(IsKnown(code)
-            ? new GrantHistoryDto
+            ? Result<GrantHistoryDto>.Success(new GrantHistoryDto
             {
                 Code = KnownCode, GroupName = "Test Group",
                 Points =
@@ -156,12 +161,12 @@ internal sealed class FakeGrantQueryService : IGrantQueryService
                         GrantCutoff = 130, GrantsAwarded = 12, MaxScore = 149, AvgScore = 138
                     }
                 ]
-            }
-            : new GrantHistoryDto { Code = code });
+            })
+            : Result<GrantHistoryDto>.Failure(NotFound(code)));
 
-    public Task<IReadOnlyList<GrantForecastDto>> GetForecastAsync(string code, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<GrantForecastDto>>(IsKnown(code)
-            ?
+    public Task<Result<IReadOnlyList<GrantForecastDto>>> GetForecastAsync(string code, CancellationToken ct = default)
+        => Task.FromResult(IsKnown(code)
+            ? Result<IReadOnlyList<GrantForecastDto>>.Success(
             [
                 new GrantForecastDto
                 {
@@ -171,6 +176,6 @@ internal sealed class FakeGrantQueryService : IGrantQueryService
                     ConfidencePercent = 55, Trend = TrendDirection.Rising,
                     DataPoints = 2, Method = "Test method"
                 }
-            ]
-            : []);
+            ])
+            : Result<IReadOnlyList<GrantForecastDto>>.Failure(NotFound(code)));
 }

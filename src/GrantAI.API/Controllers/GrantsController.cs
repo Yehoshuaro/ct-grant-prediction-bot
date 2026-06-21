@@ -3,6 +3,7 @@ using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Importing.Grants;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace GrantAI.API.Controllers;
@@ -20,15 +21,18 @@ public sealed class GrantsController : ControllerBase
 {
     private readonly IGrantImportService _import;
     private readonly IGrantQueryService _grants;
+    private readonly ProblemDetailsFactory _problemFactory;
     private readonly ILogger<GrantsController> _logger;
 
     public GrantsController(
         IGrantImportService import,
         IGrantQueryService grants,
+        ProblemDetailsFactory problemFactory,
         ILogger<GrantsController> logger)
     {
         _import = import;
         _grants = grants;
+        _problemFactory = problemFactory;
         _logger = logger;
     }
 
@@ -48,10 +52,8 @@ public sealed class GrantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<GrantHistoryDto>> GetHistory(string code, CancellationToken ct)
     {
-        var history = await _grants.GetHistoryAsync(code, ct);
-        return history.Points.Count == 0
-            ? NotFound(SpecialitiesController.NotFoundPayload(code))
-            : Ok(history);
+        var result = await _grants.GetHistoryAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
 
     /// <summary>
@@ -68,10 +70,8 @@ public sealed class GrantsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<GrantForecastDto>>> GetForecast(string code, CancellationToken ct)
     {
-        var forecasts = await _grants.GetForecastAsync(code, ct);
-        return forecasts.Count == 0
-            ? NotFound(SpecialitiesController.NotFoundPayload(code))
-            : Ok(forecasts);
+        var result = await _grants.GetForecastAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
 
     /// <summary>Imports one or more grant-list PDFs; each is parsed, folded and upserted.</summary>

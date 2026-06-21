@@ -1,6 +1,7 @@
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace GrantAI.API.Controllers;
 
@@ -11,8 +12,13 @@ namespace GrantAI.API.Controllers;
 public sealed class HistoryController : ControllerBase
 {
     private readonly ISpecialtyQueryService _specialties;
+    private readonly ProblemDetailsFactory _problemFactory;
 
-    public HistoryController(ISpecialtyQueryService specialties) => _specialties = specialties;
+    public HistoryController(ISpecialtyQueryService specialties, ProblemDetailsFactory problemFactory)
+    {
+        _specialties = specialties;
+        _problemFactory = problemFactory;
+    }
 
     /// <summary>Returns every imported campaign for a group plus applications, participants and pass-rate trends.</summary>
     /// <param name="code">Group or specialty code, e.g. <c>M094</c> (case-insensitive).</param>
@@ -23,9 +29,7 @@ public sealed class HistoryController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AdmissionHistoryDto>> Get(string code, CancellationToken ct)
     {
-        var history = await _specialties.GetHistoryAsync(code, ct);
-        return history.Points.Count == 0
-            ? NotFound(SpecialitiesController.NotFoundPayload(code))
-            : Ok(history);
+        var result = await _specialties.GetHistoryAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
 }

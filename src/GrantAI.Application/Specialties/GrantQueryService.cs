@@ -1,5 +1,6 @@
 using GrantAI.Application.Abstractions;
 using GrantAI.Application.Common;
+using GrantAI.Application.Common.Results;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Forecasting;
 using GrantAI.Domain.Entities;
@@ -10,9 +11,9 @@ namespace GrantAI.Application.Specialties;
 /// <summary>
 /// Orchestrates the grant-side reads: fetch from the grant repository, run the
 /// pure forecast engine, and memoise the result in the distributed cache. Cache
-/// keys all share <see cref="GrantCacheKeys.Root"/> so a grant import can wipe
-/// every grant-derived value in one prefix delete (without touching the
-/// admission/threshold cache).
+/// keys share <see cref="GrantCacheKeys.Root"/> so a grant import can wipe
+/// every grant-derived value in one prefix delete without touching the
+/// admission cache.
 /// </summary>
 public sealed class GrantQueryService : IGrantQueryService
 {
@@ -41,29 +42,34 @@ public sealed class GrantQueryService : IGrantQueryService
             GrantCacheKeys.List,
             async token =>
             {
-                var all = await _repository.GetAllAsync(token);
+                var all = await _repository.GetAllAsync(token).ConfigureAwait(false);
                 return BuildSummaries(all);
             },
             _ttl.Specialties,
             ct);
 
-    public Task<GrantHistoryDto> GetHistoryAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+    public async Task<Result<GrantHistoryDto>> GetHistoryAsync(string code, CancellationToken ct = default)
+    {
+        var history = await _cache.GetOrSetAsync(
             GrantCacheKeys.History(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 return BuildHistory(code, records);
             },
             _ttl.History,
-            ct);
+            ct).ConfigureAwait(false);
 
-    public Task<IReadOnlyList<GrantForecastDto>> GetForecastAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+        return history.Points.Count == 0 ? NotFound(code) : Result<GrantHistoryDto>.Success(history);
+    }
+
+    public async Task<Result<IReadOnlyList<GrantForecastDto>>> GetForecastAsync(string code, CancellationToken ct = default)
+    {
+        var forecasts = await _cache.GetOrSetAsync(
             GrantCacheKeys.Forecast(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 if (records.Count == 0)
                 {
                     _logger.LogInformation("Grant forecast requested for unknown code {Code}", code);
@@ -71,13 +77,11 @@ public sealed class GrantQueryService : IGrantQueryService
                 return _forecast.Forecast(code, records);
             },
             _ttl.Forecast,
-            ct);
+            ct).ConfigureAwait(false);
 
-    /// <summary>
-    /// Builds one <see cref="GrantSummaryDto"/> per (code, track) pair so that
-    /// the same group appearing in both Profile and Scientific-Pedagogical
-    /// shows up as two summaries — their scales are not comparable.
-    /// </summary>
+        return forecasts.Count == 0 ? NotFound(code) : Result<IReadOnlyList<GrantForecastDto>>.Success(forecasts);
+    }
+
     private static IReadOnlyList<GrantSummaryDto> BuildSummaries(IReadOnlyList<GrantCutoffRecord> records)
         => records
             .GroupBy(r => (Code: r.GroupCode, Track: r.MasterType))
@@ -135,4 +139,7 @@ public sealed class GrantQueryService : IGrantQueryService
             Points = points
         };
     }
+
+    private static Error NotFound(string code)
+        => Error.NotFound(code.ToUpperInvariant(), $"No grant data found for code '{code.ToUpperInvariant()}'.");
 }

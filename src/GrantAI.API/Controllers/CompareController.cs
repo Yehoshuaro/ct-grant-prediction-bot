@@ -1,6 +1,7 @@
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace GrantAI.API.Controllers;
 
@@ -11,8 +12,13 @@ namespace GrantAI.API.Controllers;
 public sealed class CompareController : ControllerBase
 {
     private readonly ISpecialtyQueryService _specialties;
+    private readonly ProblemDetailsFactory _problemFactory;
 
-    public CompareController(ISpecialtyQueryService specialties) => _specialties = specialties;
+    public CompareController(ISpecialtyQueryService specialties, ProblemDetailsFactory problemFactory)
+    {
+        _specialties = specialties;
+        _problemFactory = problemFactory;
+    }
 
     /// <summary>
     /// Compares summer vs winter intakes for a group (average applications,
@@ -26,9 +32,7 @@ public sealed class CompareController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ComparisonDto>> Get(string code, CancellationToken ct)
     {
-        var comparison = await _specialties.GetComparisonAsync(code, ct);
-        return comparison.BySeason.Count == 0
-            ? NotFound(SpecialitiesController.NotFoundPayload(code))
-            : Ok(comparison);
+        var result = await _specialties.GetComparisonAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
 }

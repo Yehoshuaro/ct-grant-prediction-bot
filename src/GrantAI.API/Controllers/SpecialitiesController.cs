@@ -1,6 +1,7 @@
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace GrantAI.API.Controllers;
 
@@ -13,8 +14,13 @@ namespace GrantAI.API.Controllers;
 public sealed class SpecialitiesController : ControllerBase
 {
     private readonly ISpecialtyQueryService _specialties;
+    private readonly ProblemDetailsFactory _problemFactory;
 
-    public SpecialitiesController(ISpecialtyQueryService specialties) => _specialties = specialties;
+    public SpecialitiesController(ISpecialtyQueryService specialties, ProblemDetailsFactory problemFactory)
+    {
+        _specialties = specialties;
+        _problemFactory = problemFactory;
+    }
 
     /// <summary>Lists every educational program group with a compact latest-campaign summary.</summary>
     /// <response code="200">The list of groups (empty if nothing has been imported yet).</response>
@@ -32,10 +38,7 @@ public sealed class SpecialitiesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SpecialtySummaryDto>> GetByCode(string code, CancellationToken ct)
     {
-        var summary = await _specialties.GetSpecialtyAsync(code, ct);
-        return summary is null ? NotFound(NotFoundPayload(code)) : Ok(summary);
+        var result = await _specialties.GetSpecialtyAsync(code, ct);
+        return result.ToActionResult(this, _problemFactory);
     }
-
-    internal static object NotFoundPayload(string code)
-        => new { message = $"No admission data found for code '{code}'." };
 }

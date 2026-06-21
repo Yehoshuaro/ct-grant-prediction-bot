@@ -1,6 +1,7 @@
 using GrantAI.Application.Abstractions;
 using GrantAI.Application.Analytics;
 using GrantAI.Application.Common;
+using GrantAI.Application.Common.Results;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Forecasting;
 using GrantAI.Application.Probability;
@@ -46,70 +47,90 @@ public sealed class SpecialtyQueryService : ISpecialtyQueryService
             CacheKeys.Specialties,
             async token =>
             {
-                var all = await _repository.GetAllAsync(token);
+                var all = await _repository.GetAllAsync(token).ConfigureAwait(false);
                 return _analytics.BuildSpecialtyList(all);
             },
             _ttl.Specialties,
             ct);
 
-    public async Task<SpecialtySummaryDto?> GetSpecialtyAsync(string code, CancellationToken ct = default)
+    public async Task<Result<SpecialtySummaryDto>> GetSpecialtyAsync(string code, CancellationToken ct = default)
     {
-        var list = await GetSpecialtiesAsync(ct);
-        return list.FirstOrDefault(s => string.Equals(s.Code, code, StringComparison.OrdinalIgnoreCase));
+        var list = await GetSpecialtiesAsync(ct).ConfigureAwait(false);
+        var hit = list.FirstOrDefault(s => string.Equals(s.Code, code, StringComparison.OrdinalIgnoreCase));
+        return hit is null ? NotFound(code) : Result<SpecialtySummaryDto>.Success(hit);
     }
 
-    public Task<AdmissionHistoryDto> GetHistoryAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+    public async Task<Result<AdmissionHistoryDto>> GetHistoryAsync(string code, CancellationToken ct = default)
+    {
+        var history = await _cache.GetOrSetAsync(
             CacheKeys.History(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 return _analytics.BuildHistory(code, records);
             },
             _ttl.History,
-            ct);
+            ct).ConfigureAwait(false);
 
-    public Task<ComparisonDto> GetComparisonAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+        return history.Points.Count == 0 ? NotFound(code) : Result<AdmissionHistoryDto>.Success(history);
+    }
+
+    public async Task<Result<ComparisonDto>> GetComparisonAsync(string code, CancellationToken ct = default)
+    {
+        var comparison = await _cache.GetOrSetAsync(
             CacheKeys.Comparison(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 return _analytics.Compare(code, records);
             },
             _ttl.History,
-            ct);
+            ct).ConfigureAwait(false);
 
-    public Task<ForecastDto> GetForecastAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+        return comparison.BySeason.Count == 0 ? NotFound(code) : Result<ComparisonDto>.Success(comparison);
+    }
+
+    public async Task<Result<ForecastDto>> GetForecastAsync(string code, CancellationToken ct = default)
+    {
+        var forecast = await _cache.GetOrSetAsync(
             CacheKeys.Forecast(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 return _forecast.Forecast(code, records);
             },
             _ttl.Forecast,
-            ct);
+            ct).ConfigureAwait(false);
 
-    public Task<ProbabilityDto> GetChanceAsync(string code, CancellationToken ct = default)
-        => _cache.GetOrSetAsync(
+        return forecast.DataPoints == 0 ? NotFound(code) : Result<ForecastDto>.Success(forecast);
+    }
+
+    public async Task<Result<ProbabilityDto>> GetChanceAsync(string code, CancellationToken ct = default)
+    {
+        var probability = await _cache.GetOrSetAsync(
             CacheKeys.Chance(code),
             async token =>
             {
-                var records = await _repository.GetByCodeAsync(code, token);
+                var records = await _repository.GetByCodeAsync(code, token).ConfigureAwait(false);
                 return _probability.Calculate(code, records);
             },
             _ttl.Chance,
-            ct);
+            ct).ConfigureAwait(false);
+
+        return probability.DataPoints == 0 ? NotFound(code) : Result<ProbabilityDto>.Success(probability);
+    }
 
     public Task<StatisticsOverviewDto> GetStatisticsAsync(CancellationToken ct = default)
         => _cache.GetOrSetAsync(
             CacheKeys.Statistics,
             async token =>
             {
-                var all = await _repository.GetAllAsync(token);
+                var all = await _repository.GetAllAsync(token).ConfigureAwait(false);
                 return _analytics.BuildOverview(all);
             },
             _ttl.Statistics,
             ct);
+
+    private static Error NotFound(string code)
+        => Error.NotFound(code.ToUpperInvariant(), $"No admission data found for code '{code.ToUpperInvariant()}'.");
 }
