@@ -7,24 +7,16 @@ using Microsoft.Extensions.Logging;
 namespace GrantAI.Application.Forecasting;
 
 /// <summary>
-/// Forecasts the next campaign's threshold pass rate (% набравших порог) for a
-/// group.
-///
-/// The model is intentionally transparent (no black-box ML, no external AI):
-///   1. Reduce history to one pass-rate point per campaign (year + season).
-///   2. Fit an OLS regression of pass rate over the campaign time index.
-///   3. Compute a recency-weighted moving average of recent pass rates.
-///   4. Blend the two, weighting the regression by how well it fits (R²).
-///   5. Bound the result to a plausible range and the 0–100 percentage scale.
-///   6. Derive a confidence score and an approximate prediction interval.
-///
-/// Every step contributes a human-readable factor to the explanation, which is
-/// what makes the output trustworthy for an applicant.
+/// Forecasts the next campaign's threshold pass rate for a program group.
+/// Pipeline: collapse to one point per campaign, fit an OLS line over the
+/// campaign ordinal axis, take a recency-weighted moving average, blend the
+/// two by R^2, clamp to [0, 100] and a plausible range around the observed
+/// data, and report a confidence and prediction interval.
 /// </summary>
 public sealed class ForecastService : IForecastService
 {
     private const double RateFloor = 0d;
-    private const double RateCeiling = 100d; // pass rate is a percentage
+    private const double RateCeiling = 100d;
     private const int WmaWindow = 4;
 
     private readonly ILogger<ForecastService> _logger;
@@ -40,17 +32,16 @@ public sealed class ForecastService : IForecastService
             return new ForecastDto
             {
                 Code = code,
-                Method = "n/a",
+                Method = "нет данных",
                 ConfidencePercent = 0,
                 Trend = TrendDirection.Stable,
-                Explanation = $"No historical data found for '{code}', so no forecast can be produced.",
-                Factors = ["No imported campaigns for this code."]
+                Explanation = $"Нет исторических данных для '{code}', прогноз не строится.",
+                Factors = ["Кампании по этому коду не импортированы."]
             };
         }
 
         var series = BuildCampaignSeries(records);
 
-        // One campaign: nothing to regress, so we report the last value with low confidence.
         if (series.Count == 1)
         {
             var only = series[0];
@@ -63,21 +54,27 @@ public sealed class ForecastService : IForecastService
                 ConfidencePercent = 35,
                 Trend = TrendDirection.Stable,
                 DataPoints = 1,
-                Method = "Last known value (insufficient history for regression)",
+                Method = "последнее наблюдение (для регрессии недостаточно истории)",
                 Factors =
                 [
-                    "Only one campaign is on record, so the latest pass rate is used as-is.",
-                    "Import more historical files to unlock trend-based forecasting."
+                    "На счету только одна кампания, поэтому прогноз повторяет её результат.",
+                    "Импортируйте больше истории, чтобы включить трендовый прогноз."
                 ],
                 Explanation =
-                    $"Only one campaign is available for '{code}'. The forecast simply repeats the last " +
-                    $"threshold pass rate ({only.PassRate:0.#}%) with wide uncertainty."
+                    $"Для '{code}' на счету только одна кампания. Прогноз повторяет последнюю долю " +
+                    $"прошедших порог ({only.PassRate:0.#}%) с широкой неопределённостью."
             };
         }
 
-        var xs = series.Select(p => (double)p.Ordinal).ToArray();
-        var passRates = series.Select(p => p.PassRate).ToArray();
-        var applications = series.Select(p => (double)p.Applications).ToArray();
+        var xs = new double[series.Count];
+        var passRates = new double[series.Count];
+        var applications = new double[series.Count];
+        for (var i = 0; i < series.Count; i++)
+        {
+            xs[i] = series[i].Ordinal;
+            passRates[i] = series[i].PassRate;
+            applications[i] = series[i].Applications;
+        }
 
         var regression = SimpleLinearRegression.Fit(xs, passRates);
         var nextOrdinal = series[^1].Ordinal + 1;
@@ -85,15 +82,16 @@ public sealed class ForecastService : IForecastService
         var regressionForecast = regression.Predict(nextOrdinal);
         var wma = WeightedMovingAverage.Compute(passRates, WmaWindow);
 
-        // Trust the regression more when it explains the data well.
         var regWeight = Statistics.Clamp(regression.RSquared, 0.25, 0.80);
         var wmaWeight = 1.0 - regWeight;
         var basePrediction = regWeight * regressionForecast + wmaWeight * wma;
 
         var factors = new List<string>();
 
-        // --- Pass-rate trend (from the regression slope, expressed per year) ---
-        var slopePerYear = regression.Slope * 2.0; // two campaigns per year
+        // Slope is per campaign (Ordinal step = 1 campaign). To express it per
+        // year, divide by the average campaigns-per-year observed in the series.
+        var campaignsPerYear = ObservedCampaignsPerYear(series);
+        var slopePerYear = regression.Slope * campaignsPerYear;
         var rateTrend = Classify(slopePerYear, 0.75);
         factors.Add(DescribeRateTrend(rateTrend, slopePerYear, regression.RSquared));
 
@@ -102,29 +100,26 @@ public sealed class ForecastService : IForecastService
         var predicted = Statistics.Clamp(basePrediction, observedMin - 10, observedMax + 10);
         predicted = Clamp(predicted);
 
-        // --- Context: applicant-volume trend (does not move the prediction) ---
-        var applicationsTrend = TrendOfSeries(xs, applications);
+        var applicationsTrend = TrendOfSeries(xs, applications, campaignsPerYear);
         if (applicationsTrend == TrendDirection.Rising)
-            factors.Add("Applications to this group have been rising over recent campaigns.");
+            factors.Add("Заявок в этой группе становится больше от кампании к кампании.");
         else if (applicationsTrend == TrendDirection.Falling)
-            factors.Add("Applications to this group have been falling over recent campaigns.");
+            factors.Add("Заявок в этой группе становится меньше от кампании к кампании.");
 
-        // --- Confidence: fit quality + data volume + residual stability ---
         var fitComponent = Statistics.Clamp(regression.RSquared, 0, 1);
         var dataComponent = Statistics.Clamp(series.Count / 6.0, 0, 1);
         var stabilityComponent = 1.0 - Statistics.Clamp(regression.ResidualStdDev / 20.0, 0, 1);
         var confidence = 0.45 * fitComponent + 0.30 * dataComponent + 0.25 * stabilityComponent;
         confidence = Statistics.Clamp(confidence, 0.30, 0.95);
 
-        // --- Prediction interval (wider for small samples) ---
         var tMultiplier = series.Count >= 5 ? 2.0 : 2.6;
         var margin = Math.Max(regression.PredictionMargin(nextOrdinal, tMultiplier), 2.0);
         var lower = Clamp(predicted - margin);
         var upper = Clamp(predicted + margin);
 
         factors.Add(series.Count >= 5
-            ? $"Forecast is based on {series.Count} campaigns of history."
-            : $"Only {series.Count} campaigns of history are available, so the range is widened.");
+            ? $"Прогноз построен по {series.Count} кампаниям истории."
+            : $"Доступно только {series.Count} кампании истории, поэтому диапазон шире обычного.");
 
         var dto = new ForecastDto
         {
@@ -135,12 +130,12 @@ public sealed class ForecastService : IForecastService
             ConfidencePercent = (int)Math.Round(confidence * 100),
             Trend = rateTrend,
             DataPoints = series.Count,
-            Method = "Linear regression blended with a recency-weighted moving average",
+            Method = "линейная регрессия со взвешенным скользящим средним",
             Factors = factors,
             Explanation =
-                $"Predicted threshold pass rate for the next '{code}' campaign is {predicted:0.#}% " +
-                $"(range {lower:0.#}–{upper:0.#}%, confidence {confidence * 100:0}%). " +
-                $"The pass-rate trend is {rateTrend.ToString().ToLowerInvariant()}."
+                $"Прогноз доли участников, набравших порог, для '{code}' в следующей кампании: " +
+                $"{predicted:0.#}% (от {lower:0.#} до {upper:0.#}%, уверенность {confidence * 100:0}%). " +
+                $"Тренд по доле порога: {RussianTrend(rateTrend)}."
         };
 
         _logger.LogInformation(
@@ -151,11 +146,6 @@ public sealed class ForecastService : IForecastService
         return dto;
     }
 
-    /// <summary>
-    /// Collapses raw records into one pass-rate point per campaign, summing the
-    /// participant and pass counts (defensive against any same-campaign dupes)
-    /// and ordering oldest to newest.
-    /// </summary>
     private static List<CampaignSeriesPoint> BuildCampaignSeries(IReadOnlyList<AdmissionRecord> records)
         => records
             .GroupBy(r => CampaignOrder.Ordinal(r.Year, r.Season))
@@ -170,11 +160,31 @@ public sealed class ForecastService : IForecastService
             .OrderBy(p => p.Ordinal)
             .ToList();
 
-    private static TrendDirection TrendOfSeries(IReadOnlyList<double> xs, IReadOnlyList<double> ys)
+    /// <summary>
+    /// How many campaigns per year actually appear in the series. With two
+    /// equally-spaced campaigns per year, the regression slope per ordinal step
+    /// must be multiplied by 2 to get the per-year slope. When some years only
+    /// have one campaign, that multiplier is smaller; using a fixed *2 would
+    /// inflate the slope and mis-classify the trend.
+    /// </summary>
+    private static double ObservedCampaignsPerYear(IReadOnlyList<CampaignSeriesPoint> series)
+    {
+        if (series.Count < 2) return 2.0;
+        var first = series[0].Ordinal;
+        var last = series[^1].Ordinal;
+        // Year span between first and last ordinal: ordinal == year*2 + offset,
+        // so the elapsed years are roughly (last - first) / 2.
+        var yearsSpan = (last - first) / 2.0;
+        if (yearsSpan <= 0) return series.Count;
+        // (series.Count - 1) campaigns spread across `yearsSpan` years.
+        return (series.Count - 1) / yearsSpan;
+    }
+
+    private static TrendDirection TrendOfSeries(IReadOnlyList<double> xs, IReadOnlyList<double> ys, double campaignsPerYear)
     {
         if (ys.Count < 2) return TrendDirection.Stable;
         var regression = SimpleLinearRegression.Fit(xs, ys);
-        var slopePerYear = regression.Slope * 2.0;
+        var slopePerYear = regression.Slope * campaignsPerYear;
         var mean = Statistics.Mean(ys);
         var threshold = Math.Max(0.5, Math.Abs(mean) * 0.05);
         return Classify(slopePerYear, threshold);
@@ -188,16 +198,23 @@ public sealed class ForecastService : IForecastService
 
     private static string DescribeRateTrend(TrendDirection trend, double slopePerYear, double rSquared)
     {
-        var fitNote = rSquared >= 0.6 ? "a clear" : "a weak";
+        var fitNote = rSquared >= 0.6 ? "явный" : "слабый";
         return trend switch
         {
             TrendDirection.Rising =>
-                $"Pass rates show {fitNote} upward trend (~{slopePerYear:0.#} points/year).",
+                $"Доля прошедших порог показывает {fitNote} рост (около {slopePerYear:0.#} п.п. в год).",
             TrendDirection.Falling =>
-                $"Pass rates show {fitNote} downward trend (~{Math.Abs(slopePerYear):0.#} points/year).",
-            _ => "Pass rates have been broadly flat over the available campaigns."
+                $"Доля прошедших порог показывает {fitNote} спад (около {Math.Abs(slopePerYear):0.#} п.п. в год).",
+            _ => "Доля прошедших порог в среднем стабильна по доступным кампаниям."
         };
     }
+
+    private static string RussianTrend(TrendDirection trend) => trend switch
+    {
+        TrendDirection.Rising => "растёт",
+        TrendDirection.Falling => "снижается",
+        _ => "стабилен"
+    };
 
     private static double Clamp(double value) => Statistics.Clamp(value, RateFloor, RateCeiling);
 

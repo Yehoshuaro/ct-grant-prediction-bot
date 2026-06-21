@@ -53,12 +53,12 @@ public sealed class GrantsController : ControllerBase
     }
 
     /// <summary>
-    /// Forecasts the next intake's grant cutoff for a ГОП — one entry per master's
+    /// Forecasts the next intake's grant cutoff for a ГОП: one entry per master's
     /// track on record. The forecast is intentionally an order-of-magnitude
-    /// estimate (only 2–3 years of data are usually available).
+    /// estimate (only 2-3 years of data are usually available).
     /// </summary>
     /// <param name="code">Group code, e.g. <c>M094</c> (case-insensitive).</param>
-    /// <response code="200">The forecast(s) — one entry per master's track.</response>
+    /// <response code="200">The forecast(s): one entry per master's track.</response>
     /// <response code="404">No grant data exists for the given code.</response>
     [HttpGet("{code}/forecast")]
     [ProducesResponseType(typeof(IReadOnlyList<GrantForecastDto>), StatusCodes.Status200OK)]

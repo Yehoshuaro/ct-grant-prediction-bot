@@ -3,60 +3,61 @@ using GrantAI.Application.Contracts.Responses;
 
 namespace GrantAI.Bot.Formatting;
 
-/// <summary>
-/// Turns Application DTOs into human-friendly, Telegram-HTML formatted strings.
-/// Kept separate from the routing/transport so the wording is easy to tweak.
-/// The metrics mirror the published data: applications, participants, and the
-/// share clearing the entrance threshold (КТ порог).
-/// </summary>
 internal static class MessageFormatter
 {
     public static string Welcome() =>
-        "<b>👋 Welcome to GrantAI KZ</b>\n\n" +
-        "I analyse Kazakhstan master's-degree complex-testing (КТ) statistics and " +
-        "estimate the chance of clearing the entrance threshold for a program group.\n\n" +
-        "Try <code>/speciality M094</code> or <code>/help</code> to see everything I can do.";
+        "<b>GrantAI KZ</b>\n\n" +
+        "Бот по статистике комплексного тестирования (КТ) в магистратуру " +
+        "Казахстана. Считает, насколько труден порог в группе образовательной " +
+        "программы (ГОП) и прогнозирует проходной балл на грант.\n\n" +
+        "Пример: <code>/speciality M094</code>. Полный список команд: /help.";
 
     public static string Help() =>
-        "<b>GrantAI KZ — commands</b>\n\n" +
-        "<code>/speciality M094</code> — latest summary for a program group\n" +
-        "<code>/history M094</code> — full campaign history and trends\n" +
-        "<code>/forecast M094</code> — predicted next-campaign pass rate\n" +
-        "<code>/chance M094</code> — probability of clearing the threshold\n" +
-        "<code>/compare M094</code> — summer vs winter comparison\n" +
-        "<code>/grant M094</code> — predicted next-intake <b>grant cutoff</b> score\n\n" +
-        "Codes are educational program groups such as <b>M094</b>, <b>M010</b>, <b>M001</b>.";
+        "<b>Команды</b>\n\n" +
+        "<code>/speciality M094</code> сводка по ГОП за последнюю кампанию\n" +
+        "<code>/history M094</code> вся история кампаний и тренды\n" +
+        "<code>/forecast M094</code> прогноз доли участников, набравших порог\n" +
+        "<code>/chance M094</code> шанс пройти порог в этой группе\n" +
+        "<code>/compare M094</code> сравнение лета и зимы\n" +
+        "<code>/grant M094</code> прогноз проходного балла на грант\n\n" +
+        "Коды: <b>M094</b>, <b>M010</b>, <b>M001</b> и другие коды ГОП.";
 
     public static string Usage(string command, string example) =>
-        $"⚠️ Usage: <code>{command} {example}</code>";
+        $"Использование: <code>{command} {example}</code>";
 
     public static string NotFound(string code) =>
-        $"🔍 I don't have any imported data for <b>{Display.Escape(code)}</b> yet.";
+        $"Нет данных для <b>{Display.Escape(code)}</b>. Импортируйте кампании в API или попробуйте другой код.";
+
+    public static string TooManyRequests() =>
+        "Слишком много запросов. Попробуйте через несколько секунд.";
+
+    public static string UnknownCallback() =>
+        "Действие недоступно. Используйте /help для списка команд.";
 
     public static string Summary(SpecialtySummaryDto s)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>📊 ").Append(Display.Escape(s.Code)).Append("</b>");
+        sb.Append("<b>").Append(Display.Escape(s.Code)).Append("</b>");
         if (!string.IsNullOrWhiteSpace(s.Name) &&
             !string.Equals(s.Name, s.Code, StringComparison.OrdinalIgnoreCase))
         {
-            sb.Append(" — ").Append(Display.Escape(s.Name));
+            sb.Append('\n').Append("<i>").Append(Display.Escape(s.Name)).Append("</i>");
         }
         sb.Append("\n\n");
-        sb.Append("Campaigns on record: <b>").Append(s.CampaignCount).Append("</b>\n");
-        sb.Append("Latest campaign: <b>").Append(s.LatestYear).Append(' ')
+        sb.Append("Кампаний в базе: <b>").Append(s.CampaignCount).Append("</b>\n");
+        sb.Append("Последняя кампания: <b>").Append(s.LatestYear).Append(' ')
           .Append(Display.Season(s.LatestSeason)).Append("</b>\n");
-        sb.Append("Applications: <b>").Append(s.LatestApplications).Append("</b>, ")
-          .Append("participants: <b>").Append(s.LatestParticipants).Append("</b>\n");
-        sb.Append("Threshold pass rate: <b>").Append(Display.Percent(s.LatestPassRate)).Append("</b>\n\n");
-        sb.Append("➡️ <code>/forecast ").Append(Display.Escape(s.Code)).Append("</code> for a prediction.");
+        sb.Append("Заявок: <b>").Append(s.LatestApplications).Append("</b>, ")
+          .Append("участников: <b>").Append(s.LatestParticipants).Append("</b>\n");
+        sb.Append("Доля прошедших порог: <b>").Append(Display.Percent(s.LatestPassRate)).Append("</b>\n\n");
+        sb.Append("Прогноз: <code>/forecast ").Append(Display.Escape(s.Code)).Append("</code>");
         return sb.ToString();
     }
 
     public static string History(AdmissionHistoryDto h)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>📜 History — ").Append(Display.Escape(h.Code)).Append("</b>\n");
+        sb.Append("<b>История ").Append(Display.Escape(h.Code)).Append("</b>\n");
         if (!string.IsNullOrWhiteSpace(h.GroupName) &&
             !string.Equals(h.GroupName, h.Code, StringComparison.OrdinalIgnoreCase))
         {
@@ -67,35 +68,36 @@ internal static class MessageFormatter
         foreach (var p in h.Points)
         {
             sb.Append("<b>").Append(Display.Escape(p.Label)).Append("</b>\n");
-            sb.Append("   applications ").Append(p.Applications)
-              .Append(", participants ").Append(p.Participants)
+            sb.Append("   заявок ").Append(p.Applications)
+              .Append(", участников ").Append(p.Participants)
               .Append(" (").Append(Display.Percent(p.ParticipationRate)).Append(")\n");
-            sb.Append("   passed <b>").Append(p.PassedThreshold).Append("</b>")
-              .Append(", pass rate <b>").Append(Display.Percent(p.PassRate)).Append("</b>\n");
+            sb.Append("   прошли порог <b>").Append(p.PassedThreshold).Append("</b>")
+              .Append(", доля <b>").Append(Display.Percent(p.PassRate)).Append("</b>\n");
         }
 
-        sb.Append("\n<b>Trends</b>\n");
-        sb.Append("Applications: ").Append(Display.Trend(h.ApplicationsTrend)).Append('\n');
-        sb.Append("Participants: ").Append(Display.Trend(h.ParticipantsTrend)).Append('\n');
-        sb.Append("Pass rate: ").Append(Display.Trend(h.PassRateTrend));
+        sb.Append("\n<b>Тренды</b>\n");
+        sb.Append("Заявки: ").Append(Display.Trend(h.ApplicationsTrend)).Append('\n');
+        sb.Append("Участники: ").Append(Display.Trend(h.ParticipantsTrend)).Append('\n');
+        sb.Append("Доля прохождения порога: ").Append(Display.Trend(h.PassRateTrend));
         return sb.ToString();
     }
 
     public static string Forecast(ForecastDto f)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>🔮 Forecast — ").Append(Display.Escape(f.Code)).Append("</b>\n\n");
-        sb.Append("Predicted pass rate: <b>").Append(Display.Percent(f.PredictedPassRate)).Append("</b>\n");
-        sb.Append("Likely range: <b>").Append(Display.Percent(f.LowerBound)).Append('–')
-          .Append(Display.Percent(f.UpperBound)).Append("</b>\n");
-        sb.Append("Confidence: <b>").Append(f.ConfidencePercent).Append("%</b>\n");
-        sb.Append("Trend: ").Append(Display.Trend(f.Trend)).Append('\n');
-        sb.Append("Based on <b>").Append(f.DataPoints).Append("</b> campaigns (")
+        sb.Append("<b>Прогноз ").Append(Display.Escape(f.Code)).Append("</b>\n\n");
+        sb.Append("Прогноз доли прошедших порог: <b>")
+          .Append(Display.Percent(f.PredictedPassRate)).Append("</b>\n");
+        sb.Append("Диапазон: <b>от ").Append(Display.Percent(f.LowerBound))
+          .Append(" до ").Append(Display.Percent(f.UpperBound)).Append("</b>\n");
+        sb.Append("Уверенность: <b>").Append(f.ConfidencePercent).Append("%</b>\n");
+        sb.Append("Тренд: ").Append(Display.Trend(f.Trend)).Append('\n');
+        sb.Append("Кампаний в расчёте: <b>").Append(f.DataPoints).Append("</b> (")
           .Append(Display.Escape(f.Method)).Append(")\n");
 
         if (f.Factors.Count > 0)
         {
-            sb.Append("\n<b>Main factors</b>\n");
+            sb.Append("\n<b>Факторы</b>\n");
             foreach (var factor in f.Factors)
             {
                 sb.Append("• ").Append(Display.Escape(factor)).Append('\n');
@@ -112,18 +114,18 @@ internal static class MessageFormatter
     public static string Probability(ProbabilityDto p)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>🎯 Chance — ").Append(Display.Escape(p.Code)).Append("</b>\n\n");
-        sb.Append("Probability of clearing the threshold: <b>")
-          .Append(p.PassProbabilityPercent).Append("%</b>\n");
-        sb.Append("Likely range: <b>").Append(p.LowerBoundPercent).Append('–')
-          .Append(p.UpperBoundPercent).Append("%</b>\n");
-        sb.Append("Based on a forecasted pass rate of <b>")
+        sb.Append("<b>Шанс пройти порог ").Append(Display.Escape(p.Code)).Append("</b>\n\n");
+        sb.Append("Это шанс набрать минимальный порог КТ в этой группе, а не шанс получить грант.\n\n");
+        sb.Append("Оценка вероятности: <b>").Append(p.PassProbabilityPercent).Append("%</b>\n");
+        sb.Append("Диапазон: <b>от ").Append(p.LowerBoundPercent)
+          .Append(" до ").Append(p.UpperBoundPercent).Append("%</b>\n");
+        sb.Append("Опирается на прогноз доли прошедших порог <b>")
           .Append(Display.Percent(p.PredictedPassRate)).Append("</b>")
-          .Append(" (confidence ").Append(p.ConfidencePercent).Append("%)\n");
+          .Append(" (уверенность ").Append(p.ConfidencePercent).Append("%)\n");
 
         if (p.Factors.Count > 0)
         {
-            sb.Append("\n<b>Factors</b>\n");
+            sb.Append("\n<b>Факторы</b>\n");
             foreach (var factor in p.Factors)
             {
                 sb.Append("• ").Append(Display.Escape(factor)).Append('\n');
@@ -140,17 +142,18 @@ internal static class MessageFormatter
     public static string Comparison(ComparisonDto c)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>⚖️ Comparison — ").Append(Display.Escape(c.Code)).Append("</b>\n\n");
+        sb.Append("<b>Сравнение сезонов ").Append(Display.Escape(c.Code)).Append("</b>\n\n");
 
         if (c.BySeason.Count > 0)
         {
-            sb.Append("<b>By season</b>\n");
+            sb.Append("<b>По сезонам</b>\n");
             foreach (var s in c.BySeason)
             {
-                sb.Append("• <b>").Append(Display.Season(s.Season)).Append("</b>: pass rate ")
-                  .Append(Display.Percent(s.AveragePassRate)).Append(", turn-out ")
-                  .Append(Display.Percent(s.AverageParticipationRate)).Append(", avg applications ")
-                  .Append(Display.Num(s.AverageApplications)).Append(" (").Append(s.CampaignCount).Append(")\n");
+                sb.Append("• <b>").Append(Display.Season(s.Season)).Append("</b>: ")
+                  .Append("порог ").Append(Display.Percent(s.AveragePassRate))
+                  .Append(", явка ").Append(Display.Percent(s.AverageParticipationRate))
+                  .Append(", в среднем ").Append(Display.Num(s.AverageApplications)).Append(" заявок (")
+                  .Append(s.CampaignCount).Append(" кампаний)\n");
             }
         }
 
@@ -164,9 +167,9 @@ internal static class MessageFormatter
     public static string GrantForecast(string code, IReadOnlyList<GrantForecastDto> forecasts)
     {
         var sb = new StringBuilder();
-        sb.Append("<b>🎓 Grant forecast — ").Append(Display.Escape(code.ToUpperInvariant())).Append("</b>\n");
+        sb.Append("<b>Прогноз проходного балла на грант ").Append(Display.Escape(code.ToUpperInvariant())).Append("</b>\n");
 
-        // Group name is the same for both tracks; pull it from whichever entry has one.
+        // Название ГОП одинаково для обоих треков; берём его у первой записи с непустым именем.
         var name = forecasts.Select(f => f.Name).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
         if (!string.IsNullOrWhiteSpace(name))
         {
@@ -180,14 +183,14 @@ internal static class MessageFormatter
             if (i > 0) sb.Append('\n');
 
             sb.Append("<b>").Append(Display.MasterTrack(f.MasterType)).Append("</b> ")
-              .Append("(scale 0–").Append(f.ScoreScaleMax).Append(")\n");
-            sb.Append("To win a grant in the next intake you'll likely need ")
-              .Append("<b>≈ ").Append(f.PredictedCutoff).Append(" / ").Append(f.ScoreScaleMax).Append("</b>\n");
-            sb.Append("Range: <b>").Append(f.LowerBound).Append('–').Append(f.UpperBound)
-              .Append(" / ").Append(f.ScoreScaleMax).Append("</b>\n");
-            sb.Append("Confidence: <b>").Append(f.ConfidencePercent).Append("%</b>, ")
-              .Append("trend: ").Append(Display.Trend(f.Trend)).Append('\n');
-            sb.Append("Based on <b>").Append(f.DataPoints).Append("</b> year(s) of grant data\n");
+              .Append("(шкала 0-").Append(f.ScoreScaleMax).Append(")\n");
+            sb.Append("Для гранта в следующем наборе вероятно понадобится около ")
+              .Append("<b>").Append(f.PredictedCutoff).Append(" из ").Append(f.ScoreScaleMax).Append("</b>\n");
+            sb.Append("Диапазон: <b>от ").Append(f.LowerBound).Append(" до ").Append(f.UpperBound)
+              .Append(" из ").Append(f.ScoreScaleMax).Append("</b>\n");
+            sb.Append("Уверенность: <b>").Append(f.ConfidencePercent).Append("%</b>, ")
+              .Append("тренд: ").Append(Display.Trend(f.Trend)).Append('\n');
+            sb.Append("Лет данных в расчёте: <b>").Append(f.DataPoints).Append("</b>\n");
 
             if (f.Factors.Count > 0)
             {
@@ -203,10 +206,10 @@ internal static class MessageFormatter
             }
         }
 
-        sb.Append("\n<i>Note: only 2–3 intake years are usually on record, so treat the figure as a guideline rather than a precise number.</i>");
+        sb.Append("\n<i>Обычно доступно только 2-3 года данных, поэтому значение носит ориентировочный характер.</i>");
         return sb.ToString();
     }
 
     public static string Error() =>
-        "😕 Something went wrong while handling that. Please try again in a moment.";
+        "Не удалось обработать запрос. Попробуйте ещё раз через минуту.";
 }

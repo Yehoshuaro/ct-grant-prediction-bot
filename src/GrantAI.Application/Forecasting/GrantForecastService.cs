@@ -7,16 +7,11 @@ using Microsoft.Extensions.Logging;
 namespace GrantAI.Application.Forecasting;
 
 /// <summary>
-/// Forecasts the next intake's grant cutoff for a ГОП. Built in the same
-/// transparent style as <see cref="ForecastService"/> (OLS line + recency
-/// weighted moving average + honest confidence and prediction interval), but
-/// adapted for the realities of the grant data:
-///
-///   * only 2–3 yearly points exist per (group, track), so the confidence is
-///     intentionally capped and the prediction interval widened — this is a
-///     directional estimate, not a precise number;
-///   * the two master's tracks (Profile 0–70 and Scientific-Pedagogical 0–150)
-///     are forecasted independently because their scores live on different scales.
+/// Forecasts the next intake's grant cutoff (проходной балл на грант) per ГОП
+/// and per master's track. Mirrors <see cref="ForecastService"/> but the
+/// confidence is capped and the prediction interval is wider because only 2-3
+/// yearly points typically exist per (group, track). The two scales (Profile
+/// 0-70 and Scientific-Pedagogical 0-150) are forecasted independently.
 /// </summary>
 public sealed class GrantForecastService : IGrantForecastService
 {
@@ -53,7 +48,8 @@ public sealed class GrantForecastService : IGrantForecastService
         if (ordered.Count == 1)
         {
             var only = ordered[0];
-            var margin = Math.Max(2, (int)Math.Round(scaleMax * 0.05)); // ~5% of scale
+            // Margin ~5% of the scale, floor of 2 points so the range stays informative.
+            var margin = Math.Max(2, (int)Math.Round(scaleMax * 0.05));
             var lastCutoff = only.GrantCutoff;
             return new GrantForecastDto
             {
@@ -67,35 +63,36 @@ public sealed class GrantForecastService : IGrantForecastService
                 ConfidencePercent = 30,
                 Trend = TrendDirection.Stable,
                 DataPoints = 1,
-                Method = "Last known value (insufficient history for regression)",
+                Method = "последнее наблюдение (для регрессии недостаточно истории)",
                 Factors =
                 [
-                    $"Only one intake year ({only.Year}) is on record for this track, so the latest cutoff is reused as-is.",
-                    "Import more historical PDFs to enable trend-based forecasting."
+                    $"Доступен только один год ({only.Year}) для этого трека, прогноз повторяет его проходной балл.",
+                    "Импортируйте больше PDF, чтобы включить трендовый прогноз."
                 ],
                 Explanation =
-                    $"Only one year is on record for '{code}' ({TrackLabel(track)}). " +
-                    $"The forecast repeats the last grant cutoff ({only.GrantCutoff} out of {scaleMax}) with wide uncertainty."
+                    $"Для '{code}' ({TrackLabel(track)}) доступен только один год. " +
+                    $"Прогноз повторяет последний проходной балл на грант ({only.GrantCutoff} из {scaleMax}) с широкой неопределённостью."
             };
         }
 
-        var xs = ordered.Select(r => (double)r.Year).ToArray();
-        var ys = ordered.Select(r => (double)r.GrantCutoff).ToArray();
+        var xs = new double[ordered.Count];
+        var ys = new double[ordered.Count];
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            xs[i] = ordered[i].Year;
+            ys[i] = ordered[i].GrantCutoff;
+        }
 
         var regression = SimpleLinearRegression.Fit(xs, ys);
         var nextYear = (int)xs[^1] + 1;
         var regressionForecast = regression.Predict(nextYear);
         var wma = WeightedMovingAverage.Compute(ys, WmaWindow);
 
-        // With so few points we lean more on the moving average; the regression
-        // only gets significant weight when the line genuinely fits.
         var regWeight = Statistics.Clamp(regression.RSquared, 0.20, 0.65);
         var basePrediction = regWeight * regressionForecast + (1 - regWeight) * wma;
 
         var observedMin = ys.Min();
         var observedMax = ys.Max();
-        // Don't let the prediction wander far from the observed range; cutoff
-        // movement between years is usually moderate compared to the scale.
         var predicted = Statistics.Clamp(basePrediction, observedMin - 0.1 * scaleMax, observedMax + 0.1 * scaleMax);
         predicted = Math.Clamp(predicted, 0, scaleMax);
 
@@ -106,20 +103,17 @@ public sealed class GrantForecastService : IGrantForecastService
         var factors = new List<string>
         {
             DescribeCutoffTrend(trend, slopePerYear, regression.RSquared, scaleMax),
-            $"Forecast is based on {ordered.Count} intake year(s) of grant data on the {scaleMax}-point scale.",
-            "Grant cutoffs swing year-to-year (quota effects, applicant pools); treat the figure as a guideline."
+            $"Прогноз построен по {ordered.Count} годам данных на шкале 0-{scaleMax}.",
+            "Проходной балл на грант сильно колеблется год к году (квоты, конкурс); относитесь к цифре как к ориентиру."
         };
 
-        // Confidence is capped: with only 2–3 points the maths cannot honestly
-        // promise anything close to certainty.
+        // Confidence is capped: 2-3 points cannot honestly support a high number.
         var fitComponent = Statistics.Clamp(regression.RSquared, 0, 1);
         var dataComponent = Statistics.Clamp(ordered.Count / 5.0, 0, 1);
         var stabilityComponent = 1.0 - Statistics.Clamp(regression.ResidualStdDev / (scaleMax * 0.15), 0, 1);
         var confidence = 0.40 * fitComponent + 0.30 * dataComponent + 0.30 * stabilityComponent;
         confidence = Statistics.Clamp(confidence, 0.25, 0.70);
 
-        // Use a generous t-multiplier when n is tiny; floor the margin to a
-        // few points so the range stays honest even on perfectly fitted lines.
         var tMultiplier = ordered.Count >= 4 ? 2.0 : 2.8;
         var marginRaw = Math.Max(regression.PredictionMargin(nextYear, tMultiplier), scaleMax * 0.04);
         var lower = ClampScore((int)Math.Round(predicted - marginRaw), scaleMax);
@@ -138,12 +132,12 @@ public sealed class GrantForecastService : IGrantForecastService
             ConfidencePercent = (int)Math.Round(confidence * 100),
             Trend = trend,
             DataPoints = ordered.Count,
-            Method = "Linear regression blended with a recency-weighted moving average",
+            Method = "линейная регрессия со взвешенным скользящим средним",
             Factors = factors,
             Explanation =
-                $"To win a grant in '{code}' ({TrackLabel(track)}) next intake, you would " +
-                $"likely need around {predictedInt} out of {scaleMax} points (range {lower}–{upper}, " +
-                $"confidence {confidence * 100:0}%). Trend: {trend.ToString().ToLowerInvariant()}."
+                $"Чтобы получить грант по '{code}' ({TrackLabel(track)}) в следующем наборе, " +
+                $"вероятно понадобится около {predictedInt} из {scaleMax} баллов (диапазон от {lower} до {upper}, " +
+                $"уверенность {confidence * 100:0}%). Тренд: {RussianTrend(trend)}."
         };
 
         _logger.LogInformation(
@@ -162,14 +156,14 @@ public sealed class GrantForecastService : IGrantForecastService
 
     private static string DescribeCutoffTrend(TrendDirection trend, double slopePerYear, double rSquared, int scaleMax)
     {
-        var fitNote = rSquared >= 0.6 ? "a clear" : "a weak";
+        var fitNote = rSquared >= 0.6 ? "явный" : "слабый";
         return trend switch
         {
             TrendDirection.Rising =>
-                $"Grant cutoffs show {fitNote} upward trend (~{slopePerYear:0.#} points/year on a 0–{scaleMax} scale).",
+                $"Проходной балл на грант показывает {fitNote} рост (около {slopePerYear:0.#} балла в год на шкале 0-{scaleMax}).",
             TrendDirection.Falling =>
-                $"Grant cutoffs show {fitNote} downward trend (~{Math.Abs(slopePerYear):0.#} points/year on a 0–{scaleMax} scale).",
-            _ => $"Grant cutoffs have been broadly flat across the available years (0–{scaleMax} scale)."
+                $"Проходной балл на грант показывает {fitNote} спад (около {Math.Abs(slopePerYear):0.#} балла в год на шкале 0-{scaleMax}).",
+            _ => $"Проходной балл на грант стабилен по доступным годам (шкала 0-{scaleMax})."
         };
     }
 
@@ -181,5 +175,12 @@ public sealed class GrantForecastService : IGrantForecastService
         MasterType.Profile => "профильная",
         MasterType.ScientificPedagogical => "научно-педагогическая",
         _ => track.ToString()
+    };
+
+    private static string RussianTrend(TrendDirection trend) => trend switch
+    {
+        TrendDirection.Rising => "растёт",
+        TrendDirection.Falling => "снижается",
+        _ => "стабилен"
     };
 }

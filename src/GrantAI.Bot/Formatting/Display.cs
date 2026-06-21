@@ -4,34 +4,29 @@ using GrantAI.Domain.Enums;
 
 namespace GrantAI.Bot.Formatting;
 
-/// <summary>
-/// Small presentation helpers shared by the message formatters: enum-to-text,
-/// trend arrows, percentages and HTML escaping for Telegram's HTML parse mode.
-/// </summary>
 internal static class Display
 {
     public static string Trend(TrendDirection trend) => trend switch
     {
-        TrendDirection.Rising => "📈 rising",
-        TrendDirection.Falling => "📉 falling",
-        _ => "➡️ stable"
+        TrendDirection.Rising => "рост",
+        TrendDirection.Falling => "снижение",
+        _ => "стабильно"
     };
 
     public static string Season(Season season) => season switch
     {
-        Domain.Enums.Season.Summer => "Summer",
-        Domain.Enums.Season.Winter => "Winter",
+        Domain.Enums.Season.Summer => "Лето",
+        Domain.Enums.Season.Winter => "Зима",
         _ => season.ToString()
     };
 
     public static string MasterTrack(MasterType track) => track switch
     {
-        MasterType.Profile => "Профильная (Profile)",
-        MasterType.ScientificPedagogical => "Научно-педагогическая (Scientific-Pedagogical)",
+        MasterType.Profile => "Профильная",
+        MasterType.ScientificPedagogical => "Научно-педагогическая",
         _ => track.ToString()
     };
 
-    /// <summary>Escapes the characters that matter for Telegram HTML mode.</summary>
     public static string Escape(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
     public static string Percent(double value) =>

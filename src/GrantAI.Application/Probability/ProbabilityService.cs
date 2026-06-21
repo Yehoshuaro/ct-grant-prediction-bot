@@ -1,21 +1,17 @@
 using GrantAI.Application.Common;
 using GrantAI.Application.Contracts.Responses;
+using GrantAI.Application.Forecasting;
 using GrantAI.Domain.Entities;
 using Microsoft.Extensions.Logging;
-using GrantAI.Application.Forecasting;
+
 namespace GrantAI.Application.Probability;
 
 /// <summary>
-/// Threshold-clearing probability model.
-///
-/// The published data gives, per group and campaign, the share of participants
-/// who cleared the entrance threshold. The honest estimate of "what is my chance
-/// of clearing the threshold for this group?" is therefore the forecasted pass
-/// rate, carried straight through with its prediction interval and confidence.
-///
-/// This reuses the forecast (single source of truth) and stays fully
-/// explainable: the latest pass rate, its trend, and the amount of data are the
-/// only inputs. It models the population base rate, not an individual's ability.
+/// Estimates the probability of clearing the entrance threshold (КТ порог) for
+/// a group. This is the population pass rate carried straight through from the
+/// forecast: it answers "что покажет группа", not "что покажу я". It is
+/// deliberately distinct from a grant-cutoff estimate, which is a competitive
+/// score and lives in <see cref="GrantForecastService"/>.
 /// </summary>
 public sealed class ProbabilityService : IProbabilityService
 {
@@ -41,8 +37,8 @@ public sealed class ProbabilityService : IProbabilityService
                 Code = code,
                 PassProbabilityPercent = 0,
                 DataPoints = 0,
-                Explanation = $"No historical data for '{code}', so a probability cannot be estimated.",
-                Factors = ["No imported campaigns for this code."]
+                Explanation = $"Нет исторических данных для '{code}', оценка шанса не строится.",
+                Factors = ["Кампании по этому коду не импортированы."]
             };
         }
 
@@ -59,14 +55,15 @@ public sealed class ProbabilityService : IProbabilityService
                 ? (double)latest.PassedThreshold / latest.Participants * 100.0
                 : 0d;
             factors.Add(
-                $"In the latest campaign ({CampaignOrder.Label(latest.Year, latest.Season)}), " +
-                $"{latest.PassedThreshold} of {latest.Participants} participants cleared the threshold ({latestRate:0.#}%).");
+                $"В последней кампании ({CampaignOrder.Label(latest.Year, latest.Season)}) порог " +
+                $"набрали {latest.PassedThreshold} из {latest.Participants} участников ({latestRate:0.#}%).");
         }
 
-        factors.Add($"Pass-rate trend for this group is {forecast.Trend.ToString().ToLowerInvariant()}.");
+        factors.Add($"Тренд по доле прохождения порога в группе: {RussianTrend(forecast.Trend)}.");
         factors.Add(forecast.DataPoints >= 5
-            ? $"Estimate uses {forecast.DataPoints} campaigns of history."
-            : $"Only {forecast.DataPoints} campaigns are available, so the range is wide.");
+            ? $"Оценка построена по {forecast.DataPoints} кампаниям истории."
+            : $"Доступно только {forecast.DataPoints} кампании истории, поэтому диапазон широкий.");
+        factors.Add("Это шанс пройти порог КТ в группе, не шанс получить грант. Для гранта используйте /grant.");
 
         var dto = new ProbabilityDto
         {
@@ -79,9 +76,9 @@ public sealed class ProbabilityService : IProbabilityService
             DataPoints = forecast.DataPoints,
             Factors = factors,
             Explanation =
-                $"For '{code}', the estimated probability of clearing the entrance threshold is " +
-                $"about {probability}% (range {lower}–{upper}%), based on the forecasted pass rate. " +
-                "This reflects the group's historical pass rate, not an individual candidate's ability."
+                $"Для '{code}' оценка вероятности пройти порог КТ составляет около {probability}% " +
+                $"(от {lower} до {upper}%) на основе прогноза доли прошедших порог. Это характеристика " +
+                "группы, а не отдельного абитуриента, и это не шанс получить грант."
         };
 
         _logger.LogInformation(
@@ -106,4 +103,11 @@ public sealed class ProbabilityService : IProbabilityService
         }
         return best;
     }
+
+    private static string RussianTrend(Domain.Enums.TrendDirection trend) => trend switch
+    {
+        Domain.Enums.TrendDirection.Rising => "растёт",
+        Domain.Enums.TrendDirection.Falling => "снижается",
+        _ => "стабилен"
+    };
 }

@@ -52,7 +52,7 @@ public sealed class AnalyticsService : IAnalyticsService
     {
         code = code.ToUpperInvariant();
         if (records.Count == 0)
-            return new ComparisonDto { Code = code, Summary = $"No data found for '{code}'." };
+            return new ComparisonDto { Code = code, Summary = $"Нет данных для '{code}'." };
 
         var bySeason = records
             .GroupBy(r => r.Season)
@@ -142,13 +142,14 @@ public sealed class AnalyticsService : IAnalyticsService
             if (summer is not null && winter is not null)
             {
                 var diff = summer.AveragePassRate - winter.AveragePassRate;
-                return Math.Abs(diff) < 0.5
-                    ? "Summer and winter pass rates are broadly comparable."
-                    : $"Summer pass rates run about {Math.Abs(diff):0.#} point(s) {(diff > 0 ? "higher" : "lower")} than winter on average.";
+                if (Math.Abs(diff) < 0.5)
+                    return "Летние и зимние доли прохождения порога в целом сопоставимы.";
+                var direction = diff > 0 ? "выше" : "ниже";
+                return $"Лето в среднем на {Math.Abs(diff):0.#} п.п. {direction} зимы по доле прохождения порога.";
             }
         }
 
-        return $"Comparison for '{code}' is based on the available campaigns.";
+        return $"Сравнение для '{code}' построено по доступным кампаниям.";
     }
 
     private static List<CampaignAggregate> AggregateByCampaign(IReadOnlyList<AdmissionRecord> records)

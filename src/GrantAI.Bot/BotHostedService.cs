@@ -12,8 +12,7 @@ namespace GrantAI.Bot;
 /// <summary>
 /// Long-polls Telegram for the lifetime of the host. Each incoming text message
 /// is handed to <see cref="CommandRouter"/> and the formatted reply is sent back
-/// with HTML parse mode. Implementing <see cref="IUpdateHandler"/> keeps the
-/// receive loop and error handling in one focused place.
+/// with HTML parse mode.
 /// </summary>
 public sealed class BotHostedService : BackgroundService, IUpdateHandler
 {
@@ -32,9 +31,11 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
     {
         try
         {
-            var me = await _bot.GetMe(stoppingToken);
+            var me = await _bot.GetMe(stoppingToken).ConfigureAwait(false);
             _logger.LogInformation("Telegram bot @{Username} (id {Id}) started; long-polling for updates",
                 me.Username, me.Id);
+
+            await RegisterCommandsAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -49,7 +50,7 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
             DropPendingUpdates = true
         };
 
-        await _bot.ReceiveAsync(this, receiverOptions, stoppingToken);
+        await _bot.ReceiveAsync(this, receiverOptions, stoppingToken).ConfigureAwait(false);
     }
 
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -59,7 +60,7 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
             return;
         }
 
-        var reply = await _router.RouteAsync(text, cancellationToken);
+        var reply = await _router.RouteAsync(text, cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -67,17 +68,16 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
                 chatId: message.Chat.Id,
                 text: reply,
                 parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send reply to chat {ChatId}", message.Chat.Id);
 
-            // Retry once without formatting in case the HTML was the problem.
             try
             {
                 await botClient.SendMessage(message.Chat.Id, MessageFormatter.Error(),
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             catch
             {
@@ -94,5 +94,30 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
     {
         _logger.LogError(exception, "Telegram polling error from {Source}", source);
         return Task.CompletedTask;
+    }
+
+    private async Task RegisterCommandsAsync(CancellationToken ct)
+    {
+        var commands = new[]
+        {
+            new BotCommand { Command = "start", Description = "Запуск и краткое описание" },
+            new BotCommand { Command = "help", Description = "Список команд" },
+            new BotCommand { Command = "speciality", Description = "Сводка по ГОП (например M094)" },
+            new BotCommand { Command = "history", Description = "История кампаний по ГОП" },
+            new BotCommand { Command = "forecast", Description = "Прогноз доли прошедших порог" },
+            new BotCommand { Command = "chance", Description = "Шанс пройти порог в ГОП" },
+            new BotCommand { Command = "compare", Description = "Сравнение лета и зимы" },
+            new BotCommand { Command = "grant", Description = "Прогноз проходного балла на грант" }
+        };
+
+        try
+        {
+            await _bot.SetMyCommands(commands, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal: the bot still works without the menu UI hint.
+            _logger.LogWarning(ex, "Could not register bot command list with Telegram");
+        }
     }
 }

@@ -32,7 +32,7 @@ public class ForecastServiceTests
         Assert.Equal(1, forecast.DataPoints);
         Assert.Equal(35, forecast.ConfidencePercent);
         Assert.Equal(50, forecast.PredictedPassRate, precision: 1);
-        Assert.Contains("Last known value", forecast.Method);
+        Assert.Contains("последнее наблюдение", forecast.Method);
     }
 
     [Fact]
