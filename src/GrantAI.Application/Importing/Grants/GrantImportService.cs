@@ -80,12 +80,12 @@ public sealed class GrantImportService : IGrantImportService
         if (records.Count > 0)
         {
             // The Mongo upsert reports back whether each id existed before.
-            var existing = await GetExistingIdsAsync(records.Select(r => r.Id).ToList(), ct);
+            var existing = await GetExistingIdsAsync(records.Select(r => r.Id).ToList(), ct).ConfigureAwait(false);
             updated = existing.Count;
             inserted = records.Count - updated;
 
-            await _repository.BulkUpsertAsync(records, ct);
-            await _cache.RemoveByPrefixAsync(GrantCacheKeys.Root, ct);
+            await _repository.BulkUpsertAsync(records, ct).ConfigureAwait(false);
+            await _cache.RemoveByPrefixAsync(GrantCacheKeys.Root, ct).ConfigureAwait(false);
             _logger.LogInformation(
                 "Grant cache invalidated after importing {File} ({Records} records)", fileName, records.Count);
         }
@@ -116,7 +116,7 @@ public sealed class GrantImportService : IGrantImportService
     {
         if (ids.Count == 0) return new HashSet<string>(StringComparer.Ordinal);
 
-        var all = await _repository.GetAllAsync(ct);
+        var all = await _repository.GetAllAsync(ct).ConfigureAwait(false);
         var known = new HashSet<string>(all.Select(r => r.Id), StringComparer.Ordinal);
         known.IntersectWith(ids);
         return known;

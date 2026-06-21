@@ -55,9 +55,16 @@ public sealed class SpecialtyQueryService : ISpecialtyQueryService
 
     public async Task<Result<SpecialtySummaryDto>> GetSpecialtyAsync(string code, CancellationToken ct = default)
     {
+        // The full list is already cached; reusing it avoids a separate query
+        // and keeps memory pressure low. Compare on the upper-cased code once
+        // rather than calling string.Equals(OrdinalIgnoreCase) on every element.
+        var normalized = (code ?? string.Empty).Trim().ToUpperInvariant();
         var list = await GetSpecialtiesAsync(ct).ConfigureAwait(false);
-        var hit = list.FirstOrDefault(s => string.Equals(s.Code, code, StringComparison.OrdinalIgnoreCase));
-        return hit is null ? NotFound(code) : Result<SpecialtySummaryDto>.Success(hit);
+        foreach (var summary in list)
+        {
+            if (summary.Code == normalized) return Result<SpecialtySummaryDto>.Success(summary);
+        }
+        return NotFound(code);
     }
 
     public async Task<Result<AdmissionHistoryDto>> GetHistoryAsync(string code, CancellationToken ct = default)

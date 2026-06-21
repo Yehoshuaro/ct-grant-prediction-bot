@@ -20,5 +20,5 @@ public sealed class ImportLogRepository : IImportLogRepository
             .Find(FilterDefinition<ImportLog>.Empty)
             .SortByDescending(l => l.StartedAtUtc)
             .Limit(limit)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 }

@@ -20,21 +20,21 @@ public sealed class AdmissionRepository : IAdmissionRepository
     {
         var normalized = (code ?? string.Empty).Trim().ToUpperInvariant();
         var filter = Builders<AdmissionRecord>.Filter.Eq(r => r.GroupCode, normalized);
-        return await _collection.Find(filter).ToListAsync(ct);
+        return await _collection.Find(filter).ToListAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<string>> GetGroupCodesAsync(CancellationToken ct = default)
     {
         var codes = await _collection
             .Distinct(r => r.GroupCode, FilterDefinition<AdmissionRecord>.Empty, cancellationToken: ct)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
         codes.Sort(StringComparer.Ordinal);
         return codes;
     }
 
     public async Task<IReadOnlyList<AdmissionRecord>> GetAllAsync(CancellationToken ct = default)
-        => await _collection.Find(FilterDefinition<AdmissionRecord>.Empty).ToListAsync(ct);
+        => await _collection.Find(FilterDefinition<AdmissionRecord>.Empty).ToListAsync(ct).ConfigureAwait(false);
 
     public Task<long> CountAsync(CancellationToken ct = default)
         => _collection.CountDocumentsAsync(FilterDefinition<AdmissionRecord>.Empty, cancellationToken: ct);
@@ -45,7 +45,7 @@ public sealed class AdmissionRepository : IAdmissionRepository
         if (ids.Count == 0) return [];
 
         var filter = Builders<AdmissionRecord>.Filter.In(r => r.Id, ids);
-        return await _collection.Find(filter).Project(r => r.Id).ToListAsync(ct);
+        return await _collection.Find(filter).Project(r => r.Id).ToListAsync(ct).ConfigureAwait(false);
     }
 
     public async Task BulkUpsertAsync(IReadOnlyCollection<AdmissionRecord> records, CancellationToken ct = default)
@@ -58,6 +58,6 @@ public sealed class AdmissionRepository : IAdmissionRepository
             return new ReplaceOneModel<AdmissionRecord>(filter, record) { IsUpsert = true };
         });
 
-        await _collection.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct);
+        await _collection.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct).ConfigureAwait(false);
     }
 }

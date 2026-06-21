@@ -19,21 +19,21 @@ public sealed class GrantCutoffRepository : IGrantCutoffRepository
     {
         var normalized = (code ?? string.Empty).Trim().ToUpperInvariant();
         var filter = Builders<GrantCutoffRecord>.Filter.Eq(r => r.GroupCode, normalized);
-        return await _collection.Find(filter).ToListAsync(ct);
+        return await _collection.Find(filter).ToListAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<string>> GetGroupCodesAsync(CancellationToken ct = default)
     {
         var codes = await _collection
             .Distinct(r => r.GroupCode, FilterDefinition<GrantCutoffRecord>.Empty, cancellationToken: ct)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
         codes.Sort(StringComparer.Ordinal);
         return codes;
     }
 
     public async Task<IReadOnlyList<GrantCutoffRecord>> GetAllAsync(CancellationToken ct = default)
-        => await _collection.Find(FilterDefinition<GrantCutoffRecord>.Empty).ToListAsync(ct);
+        => await _collection.Find(FilterDefinition<GrantCutoffRecord>.Empty).ToListAsync(ct).ConfigureAwait(false);
 
     public Task<long> CountAsync(CancellationToken ct = default)
         => _collection.CountDocumentsAsync(FilterDefinition<GrantCutoffRecord>.Empty, cancellationToken: ct);
@@ -48,6 +48,6 @@ public sealed class GrantCutoffRepository : IGrantCutoffRepository
             return new ReplaceOneModel<GrantCutoffRecord>(filter, record) { IsUpsert = true };
         });
 
-        await _collection.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct);
+        await _collection.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false }, ct).ConfigureAwait(false);
     }
 }

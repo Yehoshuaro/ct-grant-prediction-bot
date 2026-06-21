@@ -114,12 +114,12 @@ public sealed class ExcelImportService : IExcelImportService
 
         if (records.Count > 0)
         {
-            var existing = await _repository.GetExistingIdsAsync(byKey.Keys.ToList(), ct);
+            var existing = await _repository.GetExistingIdsAsync(byKey.Keys.ToList(), ct).ConfigureAwait(false);
             updated = existing.Count;
             inserted = records.Count - updated;
 
-            await _repository.BulkUpsertAsync(records, ct);
-            await _cache.RemoveByPrefixAsync(CacheKeys.Root, ct);
+            await _repository.BulkUpsertAsync(records, ct).ConfigureAwait(false);
+            await _cache.RemoveByPrefixAsync(CacheKeys.Root, ct).ConfigureAwait(false);
             _logger.LogInformation(
                 "Cache invalidated after importing {File} ({Records} records)", fileName, records.Count);
         }
@@ -138,7 +138,7 @@ public sealed class ExcelImportService : IExcelImportService
             Failed = failed,
             Errors = errors.Select(e => new ImportRowError { RowNumber = e.RowNumber, Reason = e.Reason }).ToList()
         };
-        await _importLogs.AddAsync(log, ct);
+        await _importLogs.AddAsync(log, ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Import finished for {File}: {Rows} rows, {Inserted} inserted, {Updated} updated, {Dupes} duplicates, {Failed} failed in {Ms} ms",

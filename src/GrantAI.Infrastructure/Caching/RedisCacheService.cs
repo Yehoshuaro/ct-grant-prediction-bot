@@ -30,20 +30,20 @@ public sealed class RedisCacheService : ICacheService
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
     {
-        var (found, value) = await TryGetAsync<T>(key);
+        var (found, value) = await TryGetAsync<T>(key).ConfigureAwait(false);
         return found ? value : default;
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct = default)
     {
         var json = JsonSerializer.Serialize(value, JsonOptions);
-        await Db.StringSetAsync(key, json, ttl);
+        await Db.StringSetAsync(key, json, ttl).ConfigureAwait(false);
     }
 
     public async Task<T> GetOrSetAsync<T>(
         string key, Func<CancellationToken, Task<T>> factory, TimeSpan ttl, CancellationToken ct = default)
     {
-        var (found, cached) = await TryGetAsync<T>(key);
+        var (found, cached) = await TryGetAsync<T>(key).ConfigureAwait(false);
         if (found && cached is not null)
         {
             _logger.LogDebug("Cache hit for {Key}", key);
@@ -51,9 +51,9 @@ public sealed class RedisCacheService : ICacheService
         }
 
         _logger.LogDebug("Cache miss for {Key}", key);
-        var fresh = await factory(ct);
+        var fresh = await factory(ct).ConfigureAwait(false);
         if (fresh is not null)
-            await SetAsync(key, fresh, ttl, ct);
+            await SetAsync(key, fresh, ttl, ct).ConfigureAwait(false);
 
         return fresh;
     }
@@ -69,9 +69,9 @@ public sealed class RedisCacheService : ICacheService
             if (!server.IsConnected || server.IsReplica)
                 continue;
 
-            await foreach (var key in server.KeysAsync(pattern: pattern).WithCancellation(ct))
+            await foreach (var key in server.KeysAsync(pattern: pattern).WithCancellation(ct).ConfigureAwait(false))
             {
-                await Db.KeyDeleteAsync(key);
+                await Db.KeyDeleteAsync(key).ConfigureAwait(false);
                 removed++;
             }
         }
@@ -85,7 +85,7 @@ public sealed class RedisCacheService : ICacheService
     {
         try
         {
-            var raw = await Db.StringGetAsync(key);
+            var raw = await Db.StringGetAsync(key).ConfigureAwait(false);
             if (raw.IsNullOrEmpty)
                 return (false, default);
 
