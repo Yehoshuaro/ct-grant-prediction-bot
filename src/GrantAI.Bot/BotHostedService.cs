@@ -49,6 +49,10 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
             _logger.LogError(ex, "Could not reach Telegram on startup; check TELEGRAM_BOT_TOKEN");
         }
 
+        // Pragmatic liveness: the bot has no HTTP surface, so we emit a periodic
+        // heartbeat. Docker restart-on-failure handles the recovery path.
+        _ = Task.Run(() => HeartbeatLoopAsync(stoppingToken), stoppingToken);
+
         var receiverOptions = new ReceiverOptions
         {
             AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
@@ -56,6 +60,23 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
         };
 
         await _bot.ReceiveAsync(this, receiverOptions, stoppingToken).ConfigureAwait(false);
+    }
+
+    private async Task HeartbeatLoopAsync(CancellationToken stoppingToken)
+    {
+        var interval = TimeSpan.FromMinutes(5);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await Task.Delay(interval, stoppingToken).ConfigureAwait(false);
+                _logger.LogInformation("Bot heartbeat ok");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown.
+        }
     }
 
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)

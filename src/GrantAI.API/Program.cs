@@ -1,9 +1,11 @@
 using System.Text.Json.Serialization;
+using GrantAI.API.Health;
 using GrantAI.API.RateLimiting;
 using GrantAI.Application.DependencyInjection;
 using GrantAI.Infrastructure.DependencyInjection;
 using GrantAI.Infrastructure.Logging;
 using GrantAI.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -28,6 +30,10 @@ try
     var rateLimitSettings = builder.Configuration.GetSection(RateLimitSettings.SectionName)
         .Get<RateLimitSettings>() ?? new RateLimitSettings();
     builder.Services.AddGrantAiRateLimiter(rateLimitSettings);
+
+    builder.Services.AddHealthChecks()
+        .AddCheck<MongoHealthCheck>("mongo", tags: ["ready"])
+        .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
 
     builder.Services
         .AddControllers()
@@ -89,6 +95,19 @@ try
     });
 
     app.UseRateLimiter();
+
+    // Liveness is dependency-free: if the process is up, it answers.
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+
+    // Readiness exercises Mongo and Redis so orchestrators can keep the API
+    // out of rotation until its backing stores are reachable.
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = registration => registration.Tags.Contains("ready")
+    });
 
     app.MapControllers();
 
