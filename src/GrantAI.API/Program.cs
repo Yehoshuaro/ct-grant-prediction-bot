@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using GrantAI.API.Errors;
 using GrantAI.API.Health;
 using GrantAI.API.RateLimiting;
 using GrantAI.Application.DependencyInjection;
@@ -34,6 +35,9 @@ try
     builder.Services.AddHealthChecks()
         .AddCheck<MongoHealthCheck>("mongo", tags: ["ready"])
         .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
+
+    builder.Services.AddProblemDetails();
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
     builder.Services
         .AddControllers()
@@ -82,6 +86,9 @@ try
             Log.Warning(ex, "Could not ensure MongoDB indexes on startup; continuing without them");
         }
     }
+
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
 
     app.UseSerilogRequestLogging();
 
