@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using GrantAI.API.RateLimiting;
 using GrantAI.Application.DependencyInjection;
 using GrantAI.Infrastructure.DependencyInjection;
 using GrantAI.Infrastructure.Logging;
@@ -23,6 +24,10 @@ try
     // Application use-cases + Infrastructure adapters (Mongo, Redis, Excel).
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+
+    var rateLimitSettings = builder.Configuration.GetSection(RateLimitSettings.SectionName)
+        .Get<RateLimitSettings>() ?? new RateLimitSettings();
+    builder.Services.AddGrantAiRateLimiter(rateLimitSettings);
 
     builder.Services
         .AddControllers()
@@ -82,6 +87,8 @@ try
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "GrantAI KZ API v1");
         options.DocumentTitle = "GrantAI KZ API";
     });
+
+    app.UseRateLimiter();
 
     app.MapControllers();
 

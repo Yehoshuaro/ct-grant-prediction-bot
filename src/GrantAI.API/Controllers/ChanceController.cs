@@ -1,6 +1,8 @@
+using GrantAI.API.RateLimiting;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GrantAI.API.Controllers;
 
@@ -8,6 +10,7 @@ namespace GrantAI.API.Controllers;
 [ApiController]
 [Route("api/chance")]
 [Produces("application/json")]
+[EnableRateLimiting(RateLimiterExtensions.StrictPolicy)]
 public sealed class ChanceController : ControllerBase
 {
     private readonly ISpecialtyQueryService _specialties;

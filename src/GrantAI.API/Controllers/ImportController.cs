@@ -1,6 +1,8 @@
+using GrantAI.API.RateLimiting;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Importing;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GrantAI.API.Controllers;
 
@@ -11,6 +13,7 @@ namespace GrantAI.API.Controllers;
 [ApiController]
 [Route("api/import")]
 [Produces("application/json")]
+[EnableRateLimiting(RateLimiterExtensions.StrictPolicy)]
 public sealed class ImportController : ControllerBase
 {
     private readonly IExcelImportService _import;

@@ -141,6 +141,11 @@ public class ApiSmokeTests : IClassFixture<ApiSmokeTests.Factory>
             builder.UseSetting("Mongo:ConnectionString",
                 "mongodb://localhost:27017/?serverSelectionTimeoutMS=300&connectTimeoutMS=300");
 
+            // Make the rate limiter effectively a no-op for the smoke tests so
+            // running them in parallel does not trigger 429s.
+            builder.UseSetting("RateLimit:Global:PermitLimit", "10000");
+            builder.UseSetting("RateLimit:Strict:PermitLimit", "10000");
+
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ISpecialtyQueryService>();

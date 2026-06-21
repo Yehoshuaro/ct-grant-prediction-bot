@@ -1,5 +1,6 @@
 using GrantAI.Bot.Formatting;
 using GrantAI.Bot.Handlers;
+using GrantAI.Bot.RateLimiting;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
@@ -18,12 +19,18 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
 {
     private readonly ITelegramBotClient _bot;
     private readonly CommandRouter _router;
+    private readonly BotRateLimiter _rateLimiter;
     private readonly ILogger<BotHostedService> _logger;
 
-    public BotHostedService(ITelegramBotClient bot, CommandRouter router, ILogger<BotHostedService> logger)
+    public BotHostedService(
+        ITelegramBotClient bot,
+        CommandRouter router,
+        BotRateLimiter rateLimiter,
+        ILogger<BotHostedService> logger)
     {
         _bot = bot;
         _router = router;
+        _rateLimiter = rateLimiter;
         _logger = logger;
     }
 
@@ -64,6 +71,13 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
             return;
         }
 
+        if (!_rateLimiter.TryAcquire(message.Chat.Id))
+        {
+            await SendReplyAsync(botClient, message.Chat.Id,
+                BotReply.Plain(MessageFormatter.TooManyRequests()), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var reply = await _router.RouteAsync(text, cancellationToken).ConfigureAwait(false);
         await SendReplyAsync(botClient, message.Chat.Id, reply, cancellationToken).ConfigureAwait(false);
     }
@@ -91,6 +105,13 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to acknowledge callback {CallbackId}", callback.Id);
+        }
+
+        if (!_rateLimiter.TryAcquire(chatId))
+        {
+            await SendReplyAsync(botClient, chatId,
+                BotReply.Plain(MessageFormatter.TooManyRequests()), ct).ConfigureAwait(false);
+            return;
         }
 
         var command = CallbackData.ToCommand(callback.Data);

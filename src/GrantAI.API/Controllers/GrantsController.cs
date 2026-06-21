@@ -1,7 +1,9 @@
+using GrantAI.API.RateLimiting;
 using GrantAI.Application.Contracts.Responses;
 using GrantAI.Application.Importing.Grants;
 using GrantAI.Application.Specialties;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GrantAI.API.Controllers;
 
@@ -61,6 +63,7 @@ public sealed class GrantsController : ControllerBase
     /// <response code="200">The forecast(s): one entry per master's track.</response>
     /// <response code="404">No grant data exists for the given code.</response>
     [HttpGet("{code}/forecast")]
+    [EnableRateLimiting(RateLimiterExtensions.StrictPolicy)]
     [ProducesResponseType(typeof(IReadOnlyList<GrantForecastDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<GrantForecastDto>>> GetForecast(string code, CancellationToken ct)
@@ -76,6 +79,7 @@ public sealed class GrantsController : ControllerBase
     /// <response code="200">Per-file import summaries (year, blocks, inserted/updated).</response>
     /// <response code="400">No files were supplied.</response>
     [HttpPost("import")]
+    [EnableRateLimiting(RateLimiterExtensions.StrictPolicy)]
     [ProducesResponseType(typeof(IReadOnlyList<GrantImportResultDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [RequestSizeLimit(128 * 1024 * 1024)]

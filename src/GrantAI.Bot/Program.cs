@@ -1,9 +1,11 @@
 using GrantAI.Application.DependencyInjection;
 using GrantAI.Bot;
 using GrantAI.Bot.Handlers;
+using GrantAI.Bot.RateLimiting;
 using GrantAI.Infrastructure.DependencyInjection;
 using GrantAI.Infrastructure.Logging;
 using GrantAI.Infrastructure.Persistence;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -34,6 +36,11 @@ try
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+
+    var rateLimitOptions = builder.Configuration.GetSection(BotRateLimiterOptions.SectionName)
+        .Get<BotRateLimiterOptions>() ?? new BotRateLimiterOptions();
+    builder.Services.AddSingleton(rateLimitOptions);
+    builder.Services.AddSingleton<BotRateLimiter>();
 
     builder.Services.AddSingleton<ITelegramBotClient>(_ => new TelegramBotClient(token));
     builder.Services.AddSingleton<CommandRouter>();
