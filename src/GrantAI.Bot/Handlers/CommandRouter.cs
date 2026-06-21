@@ -5,10 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace GrantAI.Bot.Handlers;
 
 /// <summary>
-/// Pure command interpreter: maps a raw message string to a formatted reply by
-/// calling the Application read facades. It has no Telegram dependency, so the
-/// transport (polling, sending) stays in <c>BotHostedService</c> and the routing
-/// logic here is straightforward to follow and test.
+/// Pure command interpreter: turns a raw message into a <see cref="BotReply"/>
+/// by calling the Application read facades. Transport-agnostic; the bot host
+/// is responsible for sending the reply and handling callback acknowledgement.
 /// </summary>
 public sealed class CommandRouter
 {
@@ -26,11 +25,11 @@ public sealed class CommandRouter
         _logger = logger;
     }
 
-    public async Task<string> RouteAsync(string? text, CancellationToken ct)
+    public async Task<BotReply> RouteAsync(string? text, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return MessageFormatter.Help();
+            return new BotReply(MessageFormatter.Help(), Keyboards.MainMenu());
         }
 
         var parts = text.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -43,15 +42,15 @@ public sealed class CommandRouter
         {
             return command switch
             {
-                "start" => MessageFormatter.Welcome(),
-                "help" => MessageFormatter.Help(),
-                "speciality" or "specialty" => await SpecialityAsync(args, ct),
-                "history" => await HistoryAsync(args, ct),
-                "forecast" => await ForecastAsync(args, ct),
-                "chance" => await ChanceAsync(args, ct),
-                "compare" => await CompareAsync(args, ct),
-                "grant" => await GrantAsync(args, ct),
-                _ => MessageFormatter.Help()
+                "start" => new BotReply(MessageFormatter.Welcome(), Keyboards.MainMenu()),
+                "help" => new BotReply(MessageFormatter.Help(), Keyboards.MainMenu()),
+                "speciality" or "specialty" => await SpecialityAsync(args, ct).ConfigureAwait(false),
+                "history" => await HistoryAsync(args, ct).ConfigureAwait(false),
+                "forecast" => await ForecastAsync(args, ct).ConfigureAwait(false),
+                "chance" => await ChanceAsync(args, ct).ConfigureAwait(false),
+                "compare" => await CompareAsync(args, ct).ConfigureAwait(false),
+                "grant" => await GrantAsync(args, ct).ConfigureAwait(false),
+                _ => new BotReply(MessageFormatter.Help(), Keyboards.MainMenu())
             };
         }
         catch (OperationCanceledException)
@@ -61,89 +60,82 @@ public sealed class CommandRouter
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to handle command {Command}", command);
-            return MessageFormatter.Error();
+            return BotReply.Plain(MessageFormatter.Error());
         }
     }
 
-    private async Task<string> SpecialityAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> SpecialityAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/speciality", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/speciality", "M094"));
 
         var code = args[0];
-        var summary = await _specialties.GetSpecialtyAsync(code, ct);
-        return summary is null ? MessageFormatter.NotFound(code) : MessageFormatter.Summary(summary);
+        var summary = await _specialties.GetSpecialtyAsync(code, ct).ConfigureAwait(false);
+        return summary is null
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.Summary(summary), Keyboards.ForCode(summary.Code));
     }
 
-    private async Task<string> HistoryAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> HistoryAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/history", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/history", "M094"));
 
         var code = args[0];
-        var history = await _specialties.GetHistoryAsync(code, ct);
-        return history.Points.Count == 0 ? MessageFormatter.NotFound(code) : MessageFormatter.History(history);
+        var history = await _specialties.GetHistoryAsync(code, ct).ConfigureAwait(false);
+        return history.Points.Count == 0
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.History(history), Keyboards.ForCode(history.Code));
     }
 
-    private async Task<string> ForecastAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> ForecastAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/forecast", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/forecast", "M094"));
 
         var code = args[0];
-        var forecast = await _specialties.GetForecastAsync(code, ct);
-        return forecast.DataPoints == 0 ? MessageFormatter.NotFound(code) : MessageFormatter.Forecast(forecast);
+        var forecast = await _specialties.GetForecastAsync(code, ct).ConfigureAwait(false);
+        return forecast.DataPoints == 0
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.Forecast(forecast), Keyboards.ForCode(forecast.Code));
     }
 
-    private async Task<string> ChanceAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> ChanceAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/chance", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/chance", "M094"));
 
         var code = args[0];
-        var probability = await _specialties.GetChanceAsync(code, ct);
+        var probability = await _specialties.GetChanceAsync(code, ct).ConfigureAwait(false);
         return probability.DataPoints == 0
-            ? MessageFormatter.NotFound(code)
-            : MessageFormatter.Probability(probability);
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.Probability(probability), Keyboards.ForCode(probability.Code));
     }
 
-    private async Task<string> CompareAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> CompareAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/compare", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/compare", "M094"));
 
         var code = args[0];
-        var comparison = await _specialties.GetComparisonAsync(code, ct);
+        var comparison = await _specialties.GetComparisonAsync(code, ct).ConfigureAwait(false);
         return comparison.BySeason.Count == 0
-            ? MessageFormatter.NotFound(code)
-            : MessageFormatter.Comparison(comparison);
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.Comparison(comparison), Keyboards.ForCode(comparison.Code));
     }
 
-    private async Task<string> GrantAsync(string[] args, CancellationToken ct)
+    private async Task<BotReply> GrantAsync(string[] args, CancellationToken ct)
     {
         if (args.Length < 1)
-        {
-            return MessageFormatter.Usage("/grant", "M094");
-        }
+            return BotReply.Plain(MessageFormatter.Usage("/grant", "M094"));
 
         var code = args[0];
-        var forecasts = await _grants.GetForecastAsync(code, ct);
+        var forecasts = await _grants.GetForecastAsync(code, ct).ConfigureAwait(false);
         return forecasts.Count == 0
-            ? MessageFormatter.NotFound(code)
-            : MessageFormatter.GrantForecast(code, forecasts);
+            ? BotReply.Plain(MessageFormatter.NotFound(code))
+            : new BotReply(MessageFormatter.GrantForecast(code, forecasts), Keyboards.ForCode(code.ToUpperInvariant()));
     }
 
-    /// <summary>Strips the leading slash and any <c>@BotName</c> suffix, lower-cased.</summary>
     private static string NormaliseCommand(string token)
     {
         var command = token.StartsWith('/') ? token[1..] : token;

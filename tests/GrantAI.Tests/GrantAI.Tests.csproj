@@ -29,6 +29,13 @@
     <ProjectReference Include="..\..\src\GrantAI.Application\GrantAI.Application.csproj" />
     <ProjectReference Include="..\..\src\GrantAI.Infrastructure\GrantAI.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\GrantAI.API\GrantAI.API.csproj" />
+    <!--
+      The Bot project also publishes a top-level `Program` class, which would
+      collide with the API's `Program` when resolving WebApplicationFactory<Program>.
+      Aliasing the assembly keeps Bot types accessible only via `extern alias bot;`
+      so the API tests are unaffected.
+    -->
+    <ProjectReference Include="..\..\src\GrantAI.Bot\GrantAI.Bot.csproj" Aliases="bot" />
   </ItemGroup>
 
 </Project>

@@ -10,9 +10,9 @@ using Telegram.Bot.Types.Enums;
 namespace GrantAI.Bot;
 
 /// <summary>
-/// Long-polls Telegram for the lifetime of the host. Each incoming text message
-/// is handed to <see cref="CommandRouter"/> and the formatted reply is sent back
-/// with HTML parse mode.
+/// Long-polls Telegram for the lifetime of the host. Each incoming message or
+/// callback query is routed through <see cref="CommandRouter"/>; the reply
+/// carries an optional inline keyboard which is sent back together with the text.
 /// </summary>
 public sealed class BotHostedService : BackgroundService, IUpdateHandler
 {
@@ -39,14 +39,12 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
         }
         catch (Exception ex)
         {
-            // A bad/missing token surfaces here. Log clearly and let the loop
-            // below retry through the standard polling error path.
             _logger.LogError(ex, "Could not reach Telegram on startup; check TELEGRAM_BOT_TOKEN");
         }
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message],
+            AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
             DropPendingUpdates = true
         };
 
@@ -55,35 +53,19 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
 
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
+        if (update.CallbackQuery is { } callback)
+        {
+            await HandleCallbackAsync(botClient, callback, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (update.Message is not { Text: { Length: > 0 } text } message)
         {
             return;
         }
 
         var reply = await _router.RouteAsync(text, cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            await botClient.SendMessage(
-                chatId: message.Chat.Id,
-                text: reply,
-                parseMode: ParseMode.Html,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send reply to chat {ChatId}", message.Chat.Id);
-
-            try
-            {
-                await botClient.SendMessage(message.Chat.Id, MessageFormatter.Error(),
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Nothing more we can do for this update.
-            }
-        }
+        await SendReplyAsync(botClient, message.Chat.Id, reply, cancellationToken).ConfigureAwait(false);
     }
 
     public Task HandleErrorAsync(
@@ -94,6 +76,60 @@ public sealed class BotHostedService : BackgroundService, IUpdateHandler
     {
         _logger.LogError(exception, "Telegram polling error from {Source}", source);
         return Task.CompletedTask;
+    }
+
+    private async Task HandleCallbackAsync(
+        ITelegramBotClient botClient, CallbackQuery callback, CancellationToken ct)
+    {
+        var chatId = callback.Message?.Chat.Id ?? callback.From.Id;
+
+        // Always acknowledge first so the user's button stops spinning.
+        try
+        {
+            await botClient.AnswerCallbackQuery(callback.Id, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to acknowledge callback {CallbackId}", callback.Id);
+        }
+
+        var command = CallbackData.ToCommand(callback.Data);
+        if (command is null)
+        {
+            await SendReplyAsync(botClient, chatId, BotReply.Plain(MessageFormatter.UnknownCallback()), ct).ConfigureAwait(false);
+            return;
+        }
+
+        var reply = await _router.RouteAsync(command, ct).ConfigureAwait(false);
+        await SendReplyAsync(botClient, chatId, reply, ct).ConfigureAwait(false);
+    }
+
+    private async Task SendReplyAsync(
+        ITelegramBotClient botClient, long chatId, BotReply reply, CancellationToken ct)
+    {
+        try
+        {
+            await botClient.SendMessage(
+                chatId: chatId,
+                text: reply.Text,
+                parseMode: ParseMode.Html,
+                replyMarkup: reply.Keyboard,
+                cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send reply to chat {ChatId}", chatId);
+
+            try
+            {
+                await botClient.SendMessage(chatId, MessageFormatter.Error(),
+                    cancellationToken: ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Nothing more we can do for this update.
+            }
+        }
     }
 
     private async Task RegisterCommandsAsync(CancellationToken ct)
