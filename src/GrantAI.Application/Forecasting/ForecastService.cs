@@ -90,7 +90,7 @@ public sealed class ForecastService : IForecastService
 
         // Slope is per campaign (Ordinal step = 1 campaign). To express it per
         // year, divide by the average campaigns-per-year observed in the series.
-        var campaignsPerYear = ObservedCampaignsPerYear(series);
+        var campaignsPerYear = TrendCalculator.InferCampaignsPerYear(xs);
         var slopePerYear = regression.Slope * campaignsPerYear;
         var rateTrend = Classify(slopePerYear, 0.75);
         factors.Add(DescribeRateTrend(rateTrend, slopePerYear, regression.RSquared));
@@ -159,26 +159,6 @@ public sealed class ForecastService : IForecastService
             })
             .OrderBy(p => p.Ordinal)
             .ToList();
-
-    /// <summary>
-    /// How many campaigns per year actually appear in the series. With two
-    /// equally-spaced campaigns per year, the regression slope per ordinal step
-    /// must be multiplied by 2 to get the per-year slope. When some years only
-    /// have one campaign, that multiplier is smaller; using a fixed *2 would
-    /// inflate the slope and mis-classify the trend.
-    /// </summary>
-    private static double ObservedCampaignsPerYear(IReadOnlyList<CampaignSeriesPoint> series)
-    {
-        if (series.Count < 2) return 2.0;
-        var first = series[0].Ordinal;
-        var last = series[^1].Ordinal;
-        // Year span between first and last ordinal: ordinal == year*2 + offset,
-        // so the elapsed years are roughly (last - first) / 2.
-        var yearsSpan = (last - first) / 2.0;
-        if (yearsSpan <= 0) return series.Count;
-        // (series.Count - 1) campaigns spread across `yearsSpan` years.
-        return (series.Count - 1) / yearsSpan;
-    }
 
     private static TrendDirection TrendOfSeries(IReadOnlyList<double> xs, IReadOnlyList<double> ys, double campaignsPerYear)
     {
